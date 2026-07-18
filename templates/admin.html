@@ -67,7 +67,7 @@
     <div class="card">
         <h2>Login Administrativo</h2>
         {% if error %}<div class="error">{{ error }}</div>{% endif %}
-        <form method="post" action="/admin/login">
+        <form method="post" action="/painel/login">
             <label>Usuario</label>
             <input type="text" name="username" required>
             <label>Senha</label>
@@ -80,7 +80,7 @@
 
     <div class="header">
         <span>Logado como <strong>{{ admin_user.display_name }}</strong></span>
-        <a href="/admin/logout" class="btn btn-outline" style="padding:6px 16px;font-size:12px;">Sair</a>
+        <a href="/painel/logout" class="btn btn-outline" style="padding:6px 16px;font-size:12px;">Sair</a>
     </div>
 
     <div class="ip-box">
@@ -123,13 +123,13 @@
                     <a href="https://www.mediafire.com/file/xg6h5grk75bd92s/app-debug.apk/file" target="_blank" style="color:#00d4ff;font-size:13px;">📲 Fac,a o download do aplicativo</a>
                 </p>
             </div>
-            <a href="/admin" class="btn btn-outline">Voltar</a>
+            <a href="/painel" class="btn btn-outline">Voltar</a>
         </div>
         {% endif %}
         <div class="card">
             <h2>Criar Novo Usuario</h2>
             {% if error %}<div class="error">{{ error }}</div>{% endif %}
-            <form method="post" action="/admin/create-user">
+            <form method="post" action="/painel/create-user">
                 <div class="row">
                     <div>
                         <label>Usuario</label>
@@ -219,23 +219,23 @@
                         <td>
                             <div class="actions">
                                 {% if u.device_id and not u.is_admin %}
-                                <form class="inline-form" method="post" action="/admin/unlink/{{ u.id }}" onsubmit="return confirm('Desvincular dispositivo de {{ u.username }}?')">
+                                <form class="inline-form" method="post" action="/painel/unlink/{{ u.id }}" onsubmit="return confirm('Desvincular dispositivo de {{ u.username }}?')">
                                     <button class="btn btn-warning btn-small">Resetar</button>
                                 </form>
                                 {% endif %}
                                 {% if not u.is_admin %}
-                                <form class="inline-form" method="post" action="/admin/make-permanent/{{ u.id }}" onsubmit="return confirm('Tornar {{ u.username }} permanente?')">
+                                <form class="inline-form" method="post" action="/painel/make-permanent/{{ u.id }}" onsubmit="return confirm('Tornar {{ u.username }} permanente?')">
                                     <button class="btn btn-success btn-small">Permanente</button>
                                 </form>
                                 {% endif %}
                                 {% if not u.is_admin %}
-                                <form class="inline-form" method="post" action="/admin/renew/{{ u.id }}" onsubmit="return confirm('Renovar {{ u.username }}?')">
+                                <form class="inline-form" method="post" action="/painel/renew/{{ u.id }}" onsubmit="return confirm('Renovar {{ u.username }}?')">
                                     <input type="number" name="days" value="30" min="1" max="36500" style="width:60px;padding:4px 6px;display:inline;margin:0;font-size:12px;">
                                     <button class="btn btn-small" style="padding:4px 10px;font-size:11px;">Add dias</button>
                                 </form>
                                 {% endif %}
                                 {% if not u.is_admin %}
-                                <form class="inline-form" method="post" action="/admin/delete/{{ u.id }}" onsubmit="return confirm('TEM CERTEZA? Deletar usuario {{ u.username }} permanentemente?')">
+                                <form class="inline-form" method="post" action="/painel/delete/{{ u.id }}" onsubmit="return confirm('TEM CERTEZA? Deletar usuario {{ u.username }} permanentemente?')">
                                     <button class="btn btn-danger btn-small">Deletar</button>
                                 </form>
                                 {% endif %}
