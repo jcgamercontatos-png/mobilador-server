@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+mobilador.db
+*.db
+*.db-journal
+.env
+.venv
+venv/
+env/
+.DS_Store
+*.log
+url_publica.txt
+iniciar_*.bat
+serveo_tunnel.ps1
+ngrok_tunnel.py
