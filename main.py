@@ -931,7 +931,7 @@ def admin_generate_keys(
 ):
     admin = _admin_from_request(request, db)
     if not admin:
-        return RedirectResponse(url=    "/api/painel", status_code=302)
+        return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
     quantity = max(1, min(quantity, 50))
     created_keys = []
     try:
@@ -956,28 +956,14 @@ def admin_generate_keys(
         return render(request, logged=True, admin_user=admin, error=f"Erro ao gerar: {str(e)[:200]}")
     keys_list = _keys_view(db)
     users_list = db.query(UserDB).all()
-    return render(request, **{
-        "logged": True,
-        "admin_user": admin,
-        "users": users_list,
-        "keys": keys_list,
-        "created_keys": created_keys,
-        "created_license_type": "Permanente" if license_type == "permanent" else f"Temporaria {license_days} dias",
-        "tab": "keys",
-        "stats_total": len(keys_list),
-        "stats_active": sum(1 for k in keys_list if k.get("is_active") and k.get("device_id")),
-        "stats_free": sum(1 for k in keys_list if k.get("is_active") and not k.get("device_id")),
-        "stats_users": len([u for u in users_list if not u.is_admin]),
-        "format_date": format_date,
-        "public_url": os.environ.get("PUBLIC_URL", ""),
-})
+    return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
 
 
 @app.post("/api/painel/key-reset/{key_id}")
 def admin_key_reset(request: Request, key_id: int, db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
-        return RedirectResponse(url=    "/api/painel", status_code=302)
+        return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
     row = db.query(LicenseKeyDB).filter(LicenseKeyDB.id == key_id).first()
     if row:
         row.device_id = None
@@ -988,14 +974,14 @@ def admin_key_reset(request: Request, key_id: int, db: Session = Depends(get_db)
                 user.device_id = None
                 user.license_valid = True
         db.commit()
-    return RedirectResponse(url=    "/api/painel", status_code=302)
+    return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
 
 
 @app.post("/api/painel/key-revoke/{key_id}")
 def admin_key_revoke(request: Request, key_id: int, db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
-        return RedirectResponse(url=    "/api/painel", status_code=302)
+        return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
     row = db.query(LicenseKeyDB).filter(LicenseKeyDB.id == key_id).first()
     if row:
         row.is_active = False
@@ -1004,14 +990,14 @@ def admin_key_revoke(request: Request, key_id: int, db: Session = Depends(get_db
             if user and not user.is_admin:
                 user.license_valid = False
         db.commit()
-    return RedirectResponse(url=    "/api/painel", status_code=302)
+    return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
 
 
 @app.post("/api/painel/key-delete/{key_id}")
 def admin_key_delete(request: Request, key_id: int, db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
-        return RedirectResponse(url=    "/api/painel", status_code=302)
+        return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
     row = db.query(LicenseKeyDB).filter(LicenseKeyDB.id == key_id).first()
     if row:
         if row.user_id:
@@ -1020,7 +1006,7 @@ def admin_key_delete(request: Request, key_id: int, db: Session = Depends(get_db
                 db.delete(user)
         db.delete(row)
         db.commit()
-    return RedirectResponse(url=    "/api/painel", status_code=302)
+    return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
 
 
 @app.post("/api/painel/create-user")
@@ -1029,7 +1015,7 @@ def admin_create_user(request: Request, username: str = Form(...), password: str
                       license_days: int = Form(0), db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
-        return RedirectResponse(url=    "/api/painel", status_code=302)
+        return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
     existing = db.query(UserDB).filter(UserDB.username == username).first()
     if existing:
         return render(request, **{
@@ -1048,7 +1034,7 @@ def admin_create_user(request: Request, username: str = Form(...), password: str
     )
     db.add(user)
     db.commit()
-    return RedirectResponse(url=    "/api/painel", status_code=302)
+    return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
 
 
 @app.post("/api/painel/unlink/{user_id}")
@@ -1065,7 +1051,7 @@ def admin_unlink(request: Request, user_id: int, db: Session = Depends(get_db)):
         if user:
             user.device_id = None
             db.commit()
-        return RedirectResponse(url=    "/api/painel", status_code=302)
+        return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
     except Exception:
         return RedirectResponse(url="/", status_code=302)
 
@@ -1095,7 +1081,7 @@ def admin_renew(request: Request, user_id: int, days: int = Form(30), db: Sessio
                 user.license_start = now
                 user.license_days = days
             db.commit()
-        return RedirectResponse(url=    "/api/painel", status_code=302)
+        return RedirectResponse(url="/api/painel?tab=usuarios", status_code=302)
     except Exception:
         return RedirectResponse(url="/", status_code=302)
 
@@ -1116,7 +1102,7 @@ def admin_make_permanent(request: Request, user_id: int, db: Session = Depends(g
             user.license_days = 0
             user.license_start = None
             db.commit()
-        return RedirectResponse(url=    "/api/painel", status_code=302)
+        return RedirectResponse(url="/api/painel?tab=usuarios", status_code=302)
     except Exception:
         return RedirectResponse(url="/", status_code=302)
 
@@ -1135,7 +1121,7 @@ def admin_delete(request: Request, user_id: int, db: Session = Depends(get_db)):
         if user and not user.is_admin:
             db.delete(user)
             db.commit()
-        return RedirectResponse(url=    "/api/painel", status_code=302)
+        return RedirectResponse(url="/api/painel?tab=usuarios", status_code=302)
     except Exception:
         return RedirectResponse(url="/", status_code=302)
 
