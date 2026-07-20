@@ -63,7 +63,7 @@
     <div class="card">
         <h2>Login Admin</h2>
         {% if error %}<div class="error">{{ error }}</div>{% endif %}
-        <form method="post" action="/painel/login">
+        <form method="post" action="/api/painel/login">
             <label>Usuario</label>
             <input type="text" name="username" required value="admin">
             <label>Senha</label>
@@ -76,7 +76,7 @@
 
     <div class="header">
         <span>Admin: <strong>{{ admin_user.display_name }}</strong></span>
-        <a href="/painel/logout" class="btn btn-outline" style="padding:6px 16px;font-size:12px;">Sair</a>
+        <a href="/api/painel/logout" class="btn btn-outline" style="padding:6px 16px;font-size:12px;">Sair</a>
     </div>
 
     <div class="ip-box">
@@ -109,7 +109,7 @@
         <div class="card">
             <h2>Gerar Keys de Acesso</h2>
             {% if error %}<div class="error">{{ error }}</div>{% endif %}
-            <form method="post" action="/painel/generate-keys">
+            <form method="post" action="/api/painel/generate-keys">
                 <div class="row">
                     <div>
                         <label>Quantidade</label>
@@ -176,20 +176,20 @@
                         <td style="font-family:monospace;font-size:10px;color:#9e9e9e;">
                             {{ k.device_id[:18] + '...' if k.device_id else '—' }}
                         </td>
-                        <td>
-                            <div class="actions">
-                                {% if k.device_id and k.is_active %}
-                                <form class="inline-form" method="post" action="/painel/key-reset/{{ k.id }}" onsubmit="return confirm('Resetar dispositivo desta key?')">
-                                    <button class="btn btn-warning btn-small">Resetar</button>
-                                </form>
-                                {% endif %}
-                                {% if k.is_active %}
-                                <form class="inline-form" method="post" action="/painel/key-revoke/{{ k.id }}" onsubmit="return confirm('Revogar key {{ k.key_code }}?')">
-                                    <button class="btn btn-danger btn-small">Revogar</button>
-                                </form>
-                                {% endif %}
-                            </div>
-                        </td>
+                            <td>
+                                <div class="actions">
+                                    {% if k.device_id or not k.is_active %}
+                                    <form class="inline-form" method="post" action="/api/painel/key-reset/{{ k.id }}" onsubmit="return confirm('Resetar key {{ k.key_code }}? Isso vai liberar o dispositivo e reativar a key.')">
+                                        <button class="btn btn-warning btn-small">Resetar</button>
+                                    </form>
+                                    {% endif %}
+                                    {% if k.is_active %}
+                                    <form class="inline-form" method="post" action="/api/painel/key-revoke/{{ k.id }}" onsubmit="return confirm('Revogar key {{ k.key_code }}?')">
+                                        <button class="btn btn-danger btn-small">Revogar</button>
+                                    </form>
+                                    {% endif %}
+                                </div>
+                            </td>
                     </tr>
                     {% else %}
                     <tr><td colspan="6" style="color:#9e9e9e;">Nenhuma key ainda. Gere na aba Gerar Keys.</td></tr>
@@ -235,12 +235,12 @@
                         </td>
                         <td>
                             {% if u.device_id and not u.is_admin %}
-                            <form class="inline-form" method="post" action="/painel/unlink/{{ u.id }}">
+                            <form class="inline-form" method="post" action="/api/painel/unlink/{{ u.id }}">
                                 <button class="btn btn-warning btn-small">Resetar</button>
                             </form>
                             {% endif %}
                             {% if not u.is_admin %}
-                            <form class="inline-form" method="post" action="/painel/delete/{{ u.id }}" onsubmit="return confirm('Deletar?')">
+                            <form class="inline-form" method="post" action="/api/painel/delete/{{ u.id }}" onsubmit="return confirm('Deletar?')">
                                 <button class="btn btn-danger btn-small">Del</button>
                             </form>
                             {% endif %}

@@ -169,6 +169,12 @@ class LoginRequest(BaseModel):
 class ActivateKeyRequest(BaseModel):
     key: str
     device_id: str | None = None
+    device_model: str | None = None
+    app_version: str | None = None
+
+
+class CheckDeviceRequest(BaseModel):
+    device_id: str
 
 
 class LoginResponse(BaseModel):
@@ -366,6 +372,15 @@ os.makedirs(templates_dir, exist_ok=True)
 templates = Jinja2Templates(directory=templates_dir)
 
 
+def render(request: Request, **ctx):
+    ctx = dict(ctx)
+    ctx.setdefault('request', request)
+    try:
+        return templates.TemplateResponse(request, 'admin.html', ctx)
+    except TypeError:
+        return templates.TemplateResponse('admin.html', ctx)
+
+
 # --- API Endpoints ---
 
 @app.get("/api/health", response_model=HealthResponse)
@@ -453,6 +468,44 @@ def activate_key(req: ActivateKeyRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     return build_login_response(user)
+
+
+@app.post("/api/auth/check-device")
+def check_device(req: CheckDeviceRequest, db: Session = Depends(get_db)):
+    device_id = (req.device_id or "").strip()
+    if not device_id:
+        raise HTTPException(status_code=400, detail="device_id obrigatorio")
+
+    key = db.query(LicenseKeyDB).filter(
+        LicenseKeyDB.device_id == device_id,
+        LicenseKeyDB.is_active == True
+    ).first()
+    if not key:
+        return {"found": False, "message": "Nenhuma licenca vinculada a este dispositivo"}
+
+    user = db.query(UserDB).filter(UserDB.id == key.user_id).first() if key.user_id else None
+    if not user:
+        return {"found": False, "message": "Usuario nao encontrado para esta licenca"}
+
+    lic_valid, _ = check_license(user)
+    if not lic_valid:
+        return {"found": True, "license_valid": False, "message": "Licenca expirada"}
+
+    return {
+        "found": True,
+        "token": create_token(user),
+        "expires_at": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+        "user_id": user.id,
+        "username": user.username,
+        "display_name": user.display_name or user.username,
+        "license_valid": True,
+        "license_until": None,
+        "license_type": user.license_type,
+        "license_days_remaining": None,
+        "is_admin": user.is_admin,
+        "device_locked": True,
+        "license_key": key.key_code
+    }
 
 
 @app.post("/api/auth/login", response_model=LoginResponse)
@@ -784,17 +837,19 @@ def delete_user(user_id: int, db: Session = Depends(get_db)):
 
 @app.get("/", response_class=HTMLResponse)
 def admin_page(request: Request):
-    return templates.TemplateResponse("admin.html", {"request": request})
+    if IS_VERCEL:
+        return RedirectResponse(url="/api/painel", status_code=302)
+    return render(request)
 
 
-@app.post("/painel/login")
+@app.post("/api/painel/login")
 def admin_login(request: Request, username: str = Form(...), password: str = Form(...),
                 db: Session = Depends(get_db)):
     user = db.query(UserDB).filter(UserDB.username == username).first()
     if not user or not check_password(password, user.password_hash) or not user.is_admin:
-        return templates.TemplateResponse("admin.html", {"request": request, "error": "Credenciais invalidas"})
+        return render(request, error="Credenciais invalidas")
     token = create_token(user)
-    response = RedirectResponse(url="/painel", status_code=302)
+    response = RedirectResponse(url="/api/painel", status_code=302)
     response.set_cookie(key="token", value=token, httponly=True, max_age=86400 * 30)
     return response
 
@@ -831,23 +886,22 @@ def _keys_view(db: Session):
     return result
 
 
-@app.get("/painel", response_class=HTMLResponse)
+@app.get("/api/painel", response_class=HTMLResponse)
 def admin_panel(request: Request, db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
-        return templates.TemplateResponse("admin.html", {"request": request, "logged": False})
-    return templates.TemplateResponse("admin.html", {
-        "request": request,
+        return render(request, logged=False)
+    return render(request, **{
         "logged": True,
         "admin_user": admin,
         "users": db.query(UserDB).all(),
         "keys": _keys_view(db),
         "format_date": format_date,
         "public_url": os.environ.get("PUBLIC_URL", os.environ.get("RENDER_EXTERNAL_URL", "")),
-    })
+})
 
 
-@app.post("/painel/generate-keys")
+@app.post("/api/painel/generate-keys")
 def admin_generate_keys(
     request: Request,
     quantity: int = Form(1),
@@ -858,7 +912,7 @@ def admin_generate_keys(
 ):
     admin = _admin_from_request(request, db)
     if not admin:
-        return RedirectResponse(url="/painel", status_code=302)
+        return RedirectResponse(url=    "/api/painel", status_code=302)
     quantity = max(1, min(quantity, 50))
     created_keys = []
     for i in range(quantity):
@@ -875,8 +929,7 @@ def admin_generate_keys(
         db.add(row)
         created_keys.append(code)
     db.commit()
-    return templates.TemplateResponse("admin.html", {
-        "request": request,
+    return render(request, **{
         "logged": True,
         "admin_user": admin,
         "users": db.query(UserDB).all(),
@@ -885,30 +938,32 @@ def admin_generate_keys(
         "created_license_type": "Permanente" if license_type == "permanent" else f"Temporaria {license_days} dias",
         "format_date": format_date,
         "public_url": os.environ.get("PUBLIC_URL", ""),
-    })
+})
 
 
-@app.post("/painel/key-reset/{key_id}")
+@app.post("/api/painel/key-reset/{key_id}")
 def admin_key_reset(request: Request, key_id: int, db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
-        return RedirectResponse(url="/painel", status_code=302)
+        return RedirectResponse(url=    "/api/painel", status_code=302)
     row = db.query(LicenseKeyDB).filter(LicenseKeyDB.id == key_id).first()
     if row:
         row.device_id = None
+        row.is_active = True
         if row.user_id:
             user = db.query(UserDB).filter(UserDB.id == row.user_id).first()
             if user:
                 user.device_id = None
+                user.license_valid = True
         db.commit()
-    return RedirectResponse(url="/painel", status_code=302)
+    return RedirectResponse(url=    "/api/painel", status_code=302)
 
 
-@app.post("/painel/key-revoke/{key_id}")
+@app.post("/api/painel/key-revoke/{key_id}")
 def admin_key_revoke(request: Request, key_id: int, db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
-        return RedirectResponse(url="/painel", status_code=302)
+        return RedirectResponse(url=    "/api/painel", status_code=302)
     row = db.query(LicenseKeyDB).filter(LicenseKeyDB.id == key_id).first()
     if row:
         row.is_active = False
@@ -917,23 +972,22 @@ def admin_key_revoke(request: Request, key_id: int, db: Session = Depends(get_db
             if user and not user.is_admin:
                 user.license_valid = False
         db.commit()
-    return RedirectResponse(url="/painel", status_code=302)
+    return RedirectResponse(url=    "/api/painel", status_code=302)
 
 
-@app.post("/painel/create-user")
+@app.post("/api/painel/create-user")
 def admin_create_user(request: Request, username: str = Form(...), password: str = Form(...),
                       display_name: str = Form(""), license_type: str = Form("permanent"),
                       license_days: int = Form(0), db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
-        return RedirectResponse(url="/painel", status_code=302)
+        return RedirectResponse(url=    "/api/painel", status_code=302)
     existing = db.query(UserDB).filter(UserDB.username == username).first()
     if existing:
-        return templates.TemplateResponse("admin.html", {
-            "request": request, "logged": True, "admin_user": admin,
+        return render(request, **{
             "users": db.query(UserDB).all(), "keys": _keys_view(db),
             "error": "Usuario ja existe",
-        })
+})
     now = datetime.now(timezone.utc)
     user = UserDB(
         username=username,
@@ -946,10 +1000,10 @@ def admin_create_user(request: Request, username: str = Form(...), password: str
     )
     db.add(user)
     db.commit()
-    return RedirectResponse(url="/painel", status_code=302)
+    return RedirectResponse(url=    "/api/painel", status_code=302)
 
 
-@app.post("/painel/unlink/{user_id}")
+@app.post("/api/painel/unlink/{user_id}")
 def admin_unlink(request: Request, user_id: int, db: Session = Depends(get_db)):
     token = request.cookies.get("token")
     if not token:
@@ -963,12 +1017,12 @@ def admin_unlink(request: Request, user_id: int, db: Session = Depends(get_db)):
         if user:
             user.device_id = None
             db.commit()
-        return RedirectResponse(url="/painel", status_code=302)
+        return RedirectResponse(url=    "/api/painel", status_code=302)
     except Exception:
         return RedirectResponse(url="/", status_code=302)
 
 
-@app.post("/painel/renew/{user_id}")
+@app.post("/api/painel/renew/{user_id}")
 def admin_renew(request: Request, user_id: int, days: int = Form(30), db: Session = Depends(get_db)):
     token = request.cookies.get("token")
     if not token:
@@ -993,12 +1047,12 @@ def admin_renew(request: Request, user_id: int, days: int = Form(30), db: Sessio
                 user.license_start = now
                 user.license_days = days
             db.commit()
-        return RedirectResponse(url="/painel", status_code=302)
+        return RedirectResponse(url=    "/api/painel", status_code=302)
     except Exception:
         return RedirectResponse(url="/", status_code=302)
 
 
-@app.post("/painel/make-permanent/{user_id}")
+@app.post("/api/painel/make-permanent/{user_id}")
 def admin_make_permanent(request: Request, user_id: int, db: Session = Depends(get_db)):
     token = request.cookies.get("token")
     if not token:
@@ -1014,12 +1068,12 @@ def admin_make_permanent(request: Request, user_id: int, db: Session = Depends(g
             user.license_days = 0
             user.license_start = None
             db.commit()
-        return RedirectResponse(url="/painel", status_code=302)
+        return RedirectResponse(url=    "/api/painel", status_code=302)
     except Exception:
         return RedirectResponse(url="/", status_code=302)
 
 
-@app.post("/painel/delete/{user_id}")
+@app.post("/api/painel/delete/{user_id}")
 def admin_delete(request: Request, user_id: int, db: Session = Depends(get_db)):
     token = request.cookies.get("token")
     if not token:
@@ -1033,12 +1087,12 @@ def admin_delete(request: Request, user_id: int, db: Session = Depends(get_db)):
         if user and not user.is_admin:
             db.delete(user)
             db.commit()
-        return RedirectResponse(url="/painel", status_code=302)
+        return RedirectResponse(url=    "/api/painel", status_code=302)
     except Exception:
         return RedirectResponse(url="/", status_code=302)
 
 
-@app.get("/painel/logout")
+@app.get("/api/painel/logout")
 def admin_logout():
     response = RedirectResponse(url="/", status_code=302)
     response.delete_cookie("token")
@@ -1054,7 +1108,7 @@ if __name__ == "__main__":
     print(f"Servidor rodando na porta {port}")
     url_base = os.environ.get("RENDER_EXTERNAL_URL", f"http://localhost:{port}")
     print(f"\nAcesse o painel admin no navegador:")
-    print(f"  URL: {url_base}/painel")
+    print(f"  URL: {url_base}/api/painel")
     if not os.environ.get("RENDER_EXTERNAL_URL"):
         hostname = socket.gethostname()
         for ip in socket.gethostbyname_ex(hostname)[2]:

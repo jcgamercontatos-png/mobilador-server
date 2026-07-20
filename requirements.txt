@@ -5,3 +5,4 @@ pyjwt
 bcrypt
 python-multipart
 aiofiles
+jinja2
