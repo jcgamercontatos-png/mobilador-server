@@ -349,7 +349,7 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     admin = db.query(UserDB).filter(UserDB.username == "admin").first()
     if not admin:
-        db.add(UserDB(username="admin", password_hash=hash_password("admin"),
+        db.add(UserDB(username="admin", password_hash=hash_password("jc230117"),
                       display_name="Administrador", is_admin=True,
                       license_type="permanent"))
         db.commit()
