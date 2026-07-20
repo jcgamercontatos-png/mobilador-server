@@ -4,3 +4,6 @@ services:
     env: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        value: postgresql://neondb_owner:npg_StReqj4Pop9U@ep-curly-sea-aw0qkd56.c-12.us-east-1.aws.neon.tech/neondb?sslmode=require
