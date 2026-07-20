@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+.env
+.env.local
+mobilador.db
+.vercel/
+.git/
+.gitignore
+*.bat
+*.ps1
+*.txt
+!requirements.txt
+!runtime.txt
+url_publica.txt
