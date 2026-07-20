@@ -178,12 +178,10 @@
                         </td>
                             <td>
                                 <div class="actions">
-                                    {% if k.device_id or not k.is_active %}
-                                    <form class="inline-form" method="post" action="/api/painel/key-reset/{{ k.id }}" onsubmit="return confirm('Resetar key {{ k.key_code }}? Isso vai liberar o dispositivo e reativar a key.')">
+                                    <form class="inline-form" method="post" action="/api/painel/key-reset/{{ k.id }}" onsubmit="return confirm('Resetar key {{ k.key_code }}?')">
                                         <button class="btn btn-warning btn-small">Resetar</button>
                                     </form>
-                                    {% endif %}
-                                    {% if k.is_active %}
+                                    {% if k.is_active and k.device_id %}
                                     <form class="inline-form" method="post" action="/api/painel/key-revoke/{{ k.id }}" onsubmit="return confirm('Revogar key {{ k.key_code }}?')">
                                         <button class="btn btn-danger btn-small">Revogar</button>
                                     </form>
