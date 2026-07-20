@@ -1,13 +1,6 @@
 services:
   - type: web
     name: mobilador-api
-    runtime: python
+    env: python
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-    envVars:
-      - key: SECRET_KEY
-        generateValue: true
-      - key: PUBLIC_URL
-        value: https://mobilador-api.onrender.com
-      - key: PYTHON_VERSION
-        value: 3.11.11
