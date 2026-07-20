@@ -64,7 +64,13 @@ class LicenseKeyDB(Base):
     notes = Column(Text, default="")
 
 
-engine_args = {"connect_args": {"check_same_thread": False}} if IS_SQLITE else {}
+engine_args = {"connect_args": {"check_same_thread": False}} if IS_SQLITE else {
+    "pool_pre_ping": True,
+    "pool_recycle": 280,
+    "pool_timeout": 30,
+    "max_overflow": 10,
+    "connect_args": {"connect_timeout": 10},
+}
 engine = create_engine(DATABASE_URL, **engine_args)
 SessionLocal = sessionmaker(bind=engine)
 
@@ -928,20 +934,26 @@ def admin_generate_keys(
         return RedirectResponse(url=    "/api/painel", status_code=302)
     quantity = max(1, min(quantity, 50))
     created_keys = []
-    for i in range(quantity):
-        code = generate_license_key()
-        while db.query(LicenseKeyDB).filter(LicenseKeyDB.key_code == code).first():
+    try:
+        for i in range(quantity):
             code = generate_license_key()
-        row = LicenseKeyDB(
-            key_code=code,
-            label=label or f"Key {i + 1}",
-            license_type=license_type,
-            license_days=license_days if license_type == "temporary" else 0,
-            is_active=True,
-        )
-        db.add(row)
-        created_keys.append(code)
-    db.commit()
+            while db.query(LicenseKeyDB).filter(LicenseKeyDB.key_code == code).first():
+                code = generate_license_key()
+            row = LicenseKeyDB(
+                key_code=code,
+                label=label or f"Key {i + 1}",
+                license_type=license_type,
+                license_days=license_days if license_type == "temporary" else 0,
+                is_active=True,
+            )
+            db.add(row)
+            created_keys.append(code)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        import traceback
+        traceback.print_exc()
+        return render(request, logged=True, admin_user=admin, error=f"Erro ao gerar: {str(e)[:200]}")
     keys_list = _keys_view(db)
     users_list = db.query(UserDB).all()
     return render(request, **{
