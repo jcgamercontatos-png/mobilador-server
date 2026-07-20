@@ -975,6 +975,22 @@ def admin_key_revoke(request: Request, key_id: int, db: Session = Depends(get_db
     return RedirectResponse(url=    "/api/painel", status_code=302)
 
 
+@app.post("/api/painel/key-delete/{key_id}")
+def admin_key_delete(request: Request, key_id: int, db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url=    "/api/painel", status_code=302)
+    row = db.query(LicenseKeyDB).filter(LicenseKeyDB.id == key_id).first()
+    if row:
+        if row.user_id:
+            user = db.query(UserDB).filter(UserDB.id == row.user_id).first()
+            if user and not user.is_admin:
+                db.delete(user)
+        db.delete(row)
+        db.commit()
+    return RedirectResponse(url=    "/api/painel", status_code=302)
+
+
 @app.post("/api/painel/create-user")
 def admin_create_user(request: Request, username: str = Form(...), password: str = Form(...),
                       display_name: str = Form(""), license_type: str = Form("permanent"),

@@ -186,6 +186,9 @@
                                         <button class="btn btn-danger btn-small">Revogar</button>
                                     </form>
                                     {% endif %}
+                                    <form class="inline-form" method="post" action="/api/painel/key-delete/{{ k.id }}" onsubmit="return confirm('Deletar key {{ k.key_code }} permanentemente?')">
+                                        <button class="btn btn-danger btn-small">Deletar</button>
+                                    </form>
                                 </div>
                             </td>
                     </tr>
