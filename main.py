@@ -347,11 +347,17 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
     migrate_db()
     db = SessionLocal()
-    admin = db.query(UserDB).filter(UserDB.username == "admin").first()
+    admin = db.query(UserDB).filter(UserDB.username == "jcgamer").first()
     if not admin:
-        db.add(UserDB(username="admin", password_hash=hash_password("jc230117"),
-                      display_name="Administrador", is_admin=True,
-                      license_type="permanent"))
+        legacy = db.query(UserDB).filter(UserDB.username == "admin").first()
+        if legacy:
+            legacy.username = "jcgamer"
+            legacy.password_hash = hash_password("jc230117")
+            legacy.is_admin = True
+        else:
+            db.add(UserDB(username="jcgamer", password_hash=hash_password("jc230117"),
+                          display_name="Administrador", is_admin=True,
+                          license_type="permanent"))
         db.commit()
     db.close()
     yield
