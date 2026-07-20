@@ -1,5 +1,15 @@
 services:
   - type: web
     name: mobilador-server
-    env: docker
+    runtime: docker
     plan: free
+    region: oregon
+    healthCheckPath: /api/health
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: PUBLIC_URL
+        fromService:
+          name: mobilador-server
+          type: web
+          property: host

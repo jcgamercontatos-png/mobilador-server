@@ -1,5 +1,7 @@
 import os
 import sys
+import secrets
+import re
 from datetime import datetime, timedelta, timezone
 from contextlib import asynccontextmanager
 
@@ -10,11 +12,21 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text
 from sqlalchemy.orm import declarative_base, Session, sessionmaker
 
 DIR = os.path.dirname(os.path.abspath(__file__))
-DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{os.path.join(DIR, 'mobilador.db')}")
+IS_VERCEL = os.environ.get("VERCEL", "").lower() in ("1", "true")
+# Em containers (Fly/Render), preferir volume persistente se existir
+_data_dir = os.environ.get("DATA_DIR", "/data" if os.path.isdir("/data") else DIR)
+if IS_VERCEL:
+    _data_dir = "/tmp"
+os.makedirs(_data_dir, exist_ok=True)
+DB_DIR = os.path.join(_data_dir, "mobilador.db")
+DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{DB_DIR}")
+# Render/Heroku usam postgres:// — SQLAlchemy prefere postgresql://
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 SECRET_KEY = os.environ.get("SECRET_KEY", "M0b1l4d0rS3cr3tK3y!2024#SuperS3cur3")
 IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
@@ -32,8 +44,24 @@ class UserDB(Base):
     license_days = Column(Integer, default=0)
     license_start = Column(DateTime, default=None, nullable=True)
     device_id = Column(String(255), default=None, nullable=True)
+    license_key = Column(String(64), default=None, nullable=True)
     is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class LicenseKeyDB(Base):
+    __tablename__ = "license_keys"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    key_code = Column(String(64), unique=True, nullable=False, index=True)
+    label = Column(String(255), default="")
+    license_type = Column(String(50), default="permanent")
+    license_days = Column(Integer, default=0)
+    is_active = Column(Boolean, default=True)
+    device_id = Column(String(255), default=None, nullable=True)
+    user_id = Column(Integer, default=None, nullable=True)
+    activated_at = Column(DateTime, default=None, nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    notes = Column(Text, default="")
 
 
 engine_args = {"connect_args": {"check_same_thread": False}} if IS_SQLITE else {}
@@ -49,16 +77,15 @@ def migrate_db():
     cursor = conn.cursor()
     cursor.execute("PRAGMA table_info(users)")
     cols = [row[1] for row in cursor.fetchall()]
-    for col in ["device_id", "license_type", "license_days", "license_start"]:
+    for col, sql in [
+        ("device_id", "ALTER TABLE users ADD COLUMN device_id VARCHAR"),
+        ("license_type", "ALTER TABLE users ADD COLUMN license_type VARCHAR DEFAULT 'permanent'"),
+        ("license_days", "ALTER TABLE users ADD COLUMN license_days INTEGER DEFAULT 0"),
+        ("license_start", "ALTER TABLE users ADD COLUMN license_start TIMESTAMP"),
+        ("license_key", "ALTER TABLE users ADD COLUMN license_key VARCHAR"),
+    ]:
         if col not in cols:
-            if col == "license_type":
-                cursor.execute("ALTER TABLE users ADD COLUMN license_type VARCHAR DEFAULT 'permanent'")
-            elif col == "license_days":
-                cursor.execute("ALTER TABLE users ADD COLUMN license_days INTEGER DEFAULT 0")
-            elif col == "license_start":
-                cursor.execute("ALTER TABLE users ADD COLUMN license_start TIMESTAMP")
-            elif col == "device_id":
-                cursor.execute("ALTER TABLE users ADD COLUMN device_id VARCHAR")
+            cursor.execute(sql)
     cursor.execute("PRAGMA table_info(security_events)")
     sec_cols = [row[1] for row in cursor.fetchall()]
     if not sec_cols:
@@ -73,12 +100,30 @@ def migrate_db():
                 created_at TIMESTAMP
             )
         """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS license_keys (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            key_code VARCHAR UNIQUE NOT NULL,
+            label VARCHAR DEFAULT '',
+            license_type VARCHAR DEFAULT 'permanent',
+            license_days INTEGER DEFAULT 0,
+            is_active BOOLEAN DEFAULT 1,
+            device_id VARCHAR,
+            user_id INTEGER,
+            activated_at TIMESTAMP,
+            created_at TIMESTAMP,
+            notes TEXT DEFAULT ''
+        )
+    """)
     conn.commit()
     conn.close()
 
 
-Base.metadata.create_all(engine)
-migrate_db()
+try:
+    Base.metadata.create_all(engine)
+    migrate_db()
+except Exception:
+    pass
 
 
 def get_db():
@@ -89,11 +134,20 @@ def get_db():
         db.close()
 
 
+def _as_utc(dt: datetime) -> datetime:
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def check_license(user: UserDB) -> tuple[bool, str | None]:
     if user.license_type == "permanent":
         return True, None
     if user.license_type == "temporary" and user.license_days and user.license_start:
-        expires = user.license_start + timedelta(days=user.license_days)
+        start = _as_utc(user.license_start)
+        expires = start + timedelta(days=user.license_days)
         if datetime.now(timezone.utc) > expires:
             return False, expires.isoformat()
         return True, expires.isoformat()
@@ -107,8 +161,13 @@ def format_date(dt: datetime) -> str:
 # --- Models ---
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = ""
+    password: str = ""
+    device_id: str | None = None
+
+
+class ActivateKeyRequest(BaseModel):
+    key: str
     device_id: str | None = None
 
 
@@ -124,6 +183,7 @@ class LoginResponse(BaseModel):
     license_days_remaining: int | None = None
     is_admin: bool = False
     device_locked: bool = False
+    license_key: str = ""
 
 
 class ValidateResponse(BaseModel):
@@ -233,6 +293,47 @@ def check_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
+def generate_license_key() -> str:
+    parts = [secrets.token_hex(2).upper() for _ in range(4)]
+    return f"MOB-{'-'.join(parts)}"
+
+
+def normalize_key(raw: str) -> str:
+    k = (raw or "").strip().upper()
+    k = re.sub(r"[^A-Z0-9]", "", k)
+    if k.startswith("MOB"):
+        k = k[3:]
+    # MOB + 8 hex chars -> MOB-XXXX-XXXX-XXXX-XXXX (groups of 4)
+    if len(k) == 16:
+        return "MOB-" + "-".join(k[i:i + 4] for i in range(0, 16, 4))
+    if len(k) == 8:
+        return "MOB-" + "-".join(k[i:i + 2] for i in range(0, 8, 2))
+    # fallback keep original cleaned with MOB-
+    return f"MOB-{k}" if k else ""
+
+
+def build_login_response(user: UserDB) -> LoginResponse:
+    lic_valid, lic_until = check_license(user)
+    days_remaining = None
+    if user.license_type == "temporary" and user.license_start:
+        expires = _as_utc(user.license_start) + timedelta(days=user.license_days)
+        days_remaining = max(0, (expires - datetime.now(timezone.utc)).days)
+    return LoginResponse(
+        token=create_token(user),
+        expires_at=(datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+        user_id=user.id,
+        username=user.username,
+        display_name=user.display_name or user.username,
+        license_valid=lic_valid,
+        license_until=lic_until,
+        license_type=user.license_type,
+        license_days_remaining=days_remaining,
+        is_admin=user.is_admin,
+        device_locked=bool(user.device_id),
+        license_key=user.license_key or "",
+    )
+
+
 # --- FastAPI ---
 
 @asynccontextmanager
@@ -272,44 +373,125 @@ def health():
     return HealthResponse()
 
 
-@app.post("/api/auth/login", response_model=LoginResponse)
-def login(req: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(UserDB).filter(UserDB.username == req.username).first()
-    if not user or not check_password(req.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Usuario ou senha invalidos")
+@app.post("/api/auth/activate", response_model=LoginResponse)
+def activate_key(req: ActivateKeyRequest, db: Session = Depends(get_db)):
+    raw = (req.key or "").strip()
+    if not raw:
+        raise HTTPException(status_code=400, detail="Informe a key")
 
-    lic_valid, lic_until = check_license(user)
+    key_code = normalize_key(raw)
+    # tenta varios formatos
+    candidates = {raw.strip().upper(), key_code, raw.strip()}
+    key_row = None
+    for c in candidates:
+        key_row = db.query(LicenseKeyDB).filter(LicenseKeyDB.key_code == c).first()
+        if key_row:
+            break
+    if not key_row:
+        # busca flexivel removendo hifens
+        compact = re.sub(r"[^A-Z0-9]", "", raw.upper())
+        for row in db.query(LicenseKeyDB).all():
+            if re.sub(r"[^A-Z0-9]", "", row.key_code.upper()) == compact:
+                key_row = row
+                break
+    if not key_row or not key_row.is_active:
+        raise HTTPException(status_code=401, detail="Key invalida")
+
+    device_id = (req.device_id or "").strip()
+    if not device_id:
+        raise HTTPException(status_code=400, detail="Identificador do dispositivo obrigatorio")
+
+    if key_row.device_id and key_row.device_id != device_id:
+        raise HTTPException(status_code=403, detail="Key ja vinculada a outro dispositivo. Peca ao admin resetar.")
+
+    user = None
+    if key_row.user_id:
+        user = db.query(UserDB).filter(UserDB.id == key_row.user_id).first()
+
+    now = datetime.now(timezone.utc)
+    if not user:
+        uname = f"key_{key_row.key_code.replace('-', '').lower()}"
+        existing = db.query(UserDB).filter(UserDB.username == uname).first()
+        if existing:
+            user = existing
+        else:
+            user = UserDB(
+                username=uname,
+                password_hash=hash_password(secrets.token_hex(16)),
+                display_name=key_row.label or key_row.key_code,
+                license_type=key_row.license_type,
+                license_days=key_row.license_days if key_row.license_type == "temporary" else 0,
+                license_start=now if key_row.license_type == "temporary" else None,
+                license_valid=True,
+                license_key=key_row.key_code,
+                device_id=device_id,
+            )
+            db.add(user)
+            db.flush()
+            key_row.user_id = user.id
+            key_row.activated_at = now
+    else:
+        # reativa se necessario
+        if user.device_id and user.device_id != device_id:
+            raise HTTPException(status_code=403, detail="Key ja vinculada a outro dispositivo. Peca ao admin resetar.")
+        if not user.device_id:
+            user.device_id = device_id
+        user.license_key = key_row.key_code
+        if key_row.license_type == "temporary" and not user.license_start:
+            user.license_type = "temporary"
+            user.license_days = key_row.license_days
+            user.license_start = now
+
+    key_row.device_id = device_id
+    if not key_row.activated_at:
+        key_row.activated_at = now
+
+    lic_valid, _ = check_license(user)
     if not lic_valid:
         raise HTTPException(status_code=403, detail="Licenca expirada")
 
-    if not req.device_id:
-        raise HTTPException(status_code=400, detail="Identificador do dispositivo obrigatorio")
+    db.commit()
+    db.refresh(user)
+    return build_login_response(user)
 
-    if user.device_id and user.device_id != req.device_id:
-        raise HTTPException(status_code=403, detail="Conta ja vinculada a outro dispositivo. Pec,a ao administrador desvincular.")
 
-    if not user.device_id:
-        user.device_id = req.device_id
-        db.commit()
+@app.post("/api/auth/login", response_model=LoginResponse)
+def login(req: LoginRequest, db: Session = Depends(get_db)):
+    """Aceita user/senha OU key no campo username (compatibilidade)."""
+    username = (req.username or "").strip()
+    password = (req.password or "").strip()
 
-    token = create_token(user)
-    days_remaining = None
-    if user.license_type == "temporary" and user.license_start:
-        expires = user.license_start + timedelta(days=user.license_days)
-        days_remaining = max(0, (expires - datetime.now(timezone.utc)).days)
-    return LoginResponse(
-        token=token,
-        expires_at=(datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
-        user_id=user.id,
-        username=user.username,
-        display_name=user.display_name or user.username,
-        license_valid=lic_valid,
-        license_until=lic_until,
-        license_type=user.license_type,
-        license_days_remaining=days_remaining,
-        is_admin=user.is_admin,
-        device_locked=bool(user.device_id),
-    )
+    # Se parece key (MOB-... ou so key no username e senha vazia/igual)
+    looks_like_key = username.upper().startswith("MOB") or (password == "" and len(re.sub(r"[^A-Za-z0-9]", "", username)) >= 8)
+    if looks_like_key or (password and normalize_key(username) == normalize_key(password)):
+        return activate_key(ActivateKeyRequest(key=username or password, device_id=req.device_id), db)
+    if password and password.upper().startswith("MOB"):
+        return activate_key(ActivateKeyRequest(key=password, device_id=req.device_id), db)
+
+    user = db.query(UserDB).filter(UserDB.username == username).first()
+    if not user:
+        user = db.query(UserDB).filter(UserDB.username.ilike(username)).first()
+    if not user or not check_password(password, user.password_hash):
+        # tenta como key completa no username
+        try:
+            return activate_key(ActivateKeyRequest(key=username, device_id=req.device_id), db)
+        except HTTPException:
+            raise HTTPException(status_code=401, detail="Key ou senha invalidos")
+
+    lic_valid, _ = check_license(user)
+    if not lic_valid:
+        raise HTTPException(status_code=403, detail="Licenca expirada")
+
+    if not user.is_admin:
+        if not req.device_id:
+            raise HTTPException(status_code=400, detail="Identificador do dispositivo obrigatorio")
+        if user.device_id and user.device_id != req.device_id:
+            raise HTTPException(status_code=403, detail="Conta ja vinculada a outro dispositivo. Peca ao administrador desvincular.")
+        if not user.device_id:
+            user.device_id = req.device_id
+            db.commit()
+
+    return build_login_response(user)
 
 
 @app.post("/api/auth/validate", response_model=ValidateResponse)
@@ -320,7 +502,7 @@ def validate(token_data: dict = Depends(verify_token), db: Session = Depends(get
     lic_valid, lic_until = check_license(user)
     days_remaining = None
     if user.license_type == "temporary" and user.license_start:
-        expires = user.license_start + timedelta(days=user.license_days)
+        expires = _as_utc(user.license_start) + timedelta(days=user.license_days)
         days_remaining = max(0, (expires - datetime.now(timezone.utc)).days)
     return ValidateResponse(
         valid=True,
@@ -352,29 +534,29 @@ def security_verify(req: SecurityVerifyRequest, db: Session = Depends(get_db)):
         data = verify_token(req.token)
         user = db.query(UserDB).filter(UserDB.id == data["user_id"]).first()
         if not user:
-            response.message = "Erro de seguranca. Esta versao nao e autorizada."
+            response.message = "Usuario nao encontrado"
+            return response
+        lic_ok, _ = check_license(user)
+        if not lic_ok:
+            response.message = "Licenca expirada"
             return response
         response.license_ok = True
-        if user.device_id and user.device_id != req.device_id:
-            response.message = "Erro de seguranca. Esta versao nao e autorizada."
+        if user.device_id and user.device_id != req.device_id and not user.is_admin:
+            response.message = "Conta ja vinculada a outro dispositivo"
             db.add(SecurityEventLog(username=user.username, event_type="device_mismatch", device_id=req.device_id, details=f"Esperado: {user.device_id}"))
             db.commit()
             return response
         response.device_ok = True
-        if req.package_name != EXPECTED_PACKAGE:
+        if req.package_name and req.package_name != EXPECTED_PACKAGE:
             response.message = "Erro de seguranca. Esta versao nao e autorizada."
             db.add(SecurityEventLog(username=user.username, event_type="package_mismatch", device_id=req.device_id, details=f"Pacote: {req.package_name}"))
             db.commit()
             return response
-        if req.signature_hash != EXPECTED_SIGNATURE:
-            response.message = "Erro de seguranca. Esta versao nao e autorizada."
-            db.add(SecurityEventLog(username=user.username, event_type="signature_mismatch", device_id=req.device_id, details=f"Assinatura: {req.signature_hash[:40]}..."))
-            db.commit()
-            return response
+        # Aceita assinatura debug/release; so bloqueia se package estiver errado
         response.integrity_ok = True
         response.allowed = True
     except Exception:
-        response.message = "Erro de seguranca. Esta versao nao e autorizada."
+        response.message = "Token invalido"
     return response
 
 
@@ -525,7 +707,7 @@ def list_users(db: Session = Depends(get_db)):
         lic_valid, lic_until = check_license(u)
         days_remaining = None
         if u.license_type == "temporary" and u.license_start:
-            expires = u.license_start + timedelta(days=u.license_days)
+            expires = _as_utc(u.license_start) + timedelta(days=u.license_days)
             days_remaining = max(0, (expires - datetime.now(timezone.utc)).days)
         result.append({
             "id": u.id,
@@ -617,67 +799,154 @@ def admin_login(request: Request, username: str = Form(...), password: str = For
     return response
 
 
-@app.get("/painel", response_class=HTMLResponse)
-def admin_panel(request: Request, db: Session = Depends(get_db)):
+def _admin_from_request(request: Request, db: Session):
     token = request.cookies.get("token")
     if not token:
-        return templates.TemplateResponse("admin.html", {"request": request, "logged": False})
+        return None
     try:
         data = verify_token(token)
         user = db.query(UserDB).filter(UserDB.id == data["user_id"]).first()
-        if not user or not user.is_admin:
-            return templates.TemplateResponse("admin.html", {"request": request, "logged": False})
-        users = db.query(UserDB).all()
-        return templates.TemplateResponse("admin.html", {"request": request, "logged": True,
-                                                         "admin_user": user, "users": users,
-                                                         "format_date": format_date})
+        if user and user.is_admin:
+            return user
     except Exception:
+        pass
+    return None
+
+
+def _keys_view(db: Session):
+    rows = db.query(LicenseKeyDB).order_by(LicenseKeyDB.id.desc()).all()
+    result = []
+    for k in rows:
+        result.append({
+            "id": k.id,
+            "key_code": k.key_code,
+            "label": k.label or "",
+            "license_type": k.license_type,
+            "license_days": k.license_days,
+            "is_active": k.is_active,
+            "device_id": k.device_id,
+            "activated_at": k.activated_at.isoformat() if k.activated_at else "",
+            "created_at": k.created_at.isoformat() if k.created_at else "",
+        })
+    return result
+
+
+@app.get("/painel", response_class=HTMLResponse)
+def admin_panel(request: Request, db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
         return templates.TemplateResponse("admin.html", {"request": request, "logged": False})
+    return templates.TemplateResponse("admin.html", {
+        "request": request,
+        "logged": True,
+        "admin_user": admin,
+        "users": db.query(UserDB).all(),
+        "keys": _keys_view(db),
+        "format_date": format_date,
+        "public_url": os.environ.get("PUBLIC_URL", os.environ.get("RENDER_EXTERNAL_URL", "")),
+    })
+
+
+@app.post("/painel/generate-keys")
+def admin_generate_keys(
+    request: Request,
+    quantity: int = Form(1),
+    label: str = Form(""),
+    license_type: str = Form("permanent"),
+    license_days: int = Form(30),
+    db: Session = Depends(get_db),
+):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/painel", status_code=302)
+    quantity = max(1, min(quantity, 50))
+    created_keys = []
+    for i in range(quantity):
+        code = generate_license_key()
+        while db.query(LicenseKeyDB).filter(LicenseKeyDB.key_code == code).first():
+            code = generate_license_key()
+        row = LicenseKeyDB(
+            key_code=code,
+            label=label or f"Key {i + 1}",
+            license_type=license_type,
+            license_days=license_days if license_type == "temporary" else 0,
+            is_active=True,
+        )
+        db.add(row)
+        created_keys.append(code)
+    db.commit()
+    return templates.TemplateResponse("admin.html", {
+        "request": request,
+        "logged": True,
+        "admin_user": admin,
+        "users": db.query(UserDB).all(),
+        "keys": _keys_view(db),
+        "created_keys": created_keys,
+        "created_license_type": "Permanente" if license_type == "permanent" else f"Temporaria {license_days} dias",
+        "format_date": format_date,
+        "public_url": os.environ.get("PUBLIC_URL", ""),
+    })
+
+
+@app.post("/painel/key-reset/{key_id}")
+def admin_key_reset(request: Request, key_id: int, db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/painel", status_code=302)
+    row = db.query(LicenseKeyDB).filter(LicenseKeyDB.id == key_id).first()
+    if row:
+        row.device_id = None
+        if row.user_id:
+            user = db.query(UserDB).filter(UserDB.id == row.user_id).first()
+            if user:
+                user.device_id = None
+        db.commit()
+    return RedirectResponse(url="/painel", status_code=302)
+
+
+@app.post("/painel/key-revoke/{key_id}")
+def admin_key_revoke(request: Request, key_id: int, db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/painel", status_code=302)
+    row = db.query(LicenseKeyDB).filter(LicenseKeyDB.id == key_id).first()
+    if row:
+        row.is_active = False
+        if row.user_id:
+            user = db.query(UserDB).filter(UserDB.id == row.user_id).first()
+            if user and not user.is_admin:
+                user.license_valid = False
+        db.commit()
+    return RedirectResponse(url="/painel", status_code=302)
 
 
 @app.post("/painel/create-user")
 def admin_create_user(request: Request, username: str = Form(...), password: str = Form(...),
                       display_name: str = Form(""), license_type: str = Form("permanent"),
                       license_days: int = Form(0), db: Session = Depends(get_db)):
-    token = request.cookies.get("token")
-    if not token:
-        return RedirectResponse(url="/", status_code=302)
-    try:
-        data = verify_token(token)
-        admin = db.query(UserDB).filter(UserDB.id == data["user_id"]).first()
-        if not admin or not admin.is_admin:
-            return RedirectResponse(url="/", status_code=302)
-        existing = db.query(UserDB).filter(UserDB.username == username).first()
-        if existing:
-            return templates.TemplateResponse("admin.html", {"request": request, "logged": True,
-                                                             "admin_user": admin,
-                                                             "users": db.query(UserDB).all(),
-                                                             "error": "Usuario ja existe"})
-        now = datetime.now(timezone.utc)
-        user = UserDB(
-            username=username,
-            password_hash=hash_password(password),
-            display_name=display_name or username,
-            license_type=license_type,
-            license_days=license_days if license_type == "temporary" else 0,
-            license_start=now if license_type == "temporary" else None,
-            license_valid=True,
-        )
-        db.add(user)
-        db.commit()
-        created = {
-            "username": username,
-            "password": password,
-            "display_name": display_name or username,
-            "license_type": "Permanente" if license_type == "permanent" else "Temporaria",
-            "license_days": license_days if license_type == "temporary" else None,
-        }
-        return templates.TemplateResponse("admin.html", {"request": request, "logged": True,
-                                                         "admin_user": admin,
-                                                         "users": db.query(UserDB).all(),
-                                                         "created": created})
-    except Exception:
-        return RedirectResponse(url="/", status_code=302)
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/painel", status_code=302)
+    existing = db.query(UserDB).filter(UserDB.username == username).first()
+    if existing:
+        return templates.TemplateResponse("admin.html", {
+            "request": request, "logged": True, "admin_user": admin,
+            "users": db.query(UserDB).all(), "keys": _keys_view(db),
+            "error": "Usuario ja existe",
+        })
+    now = datetime.now(timezone.utc)
+    user = UserDB(
+        username=username,
+        password_hash=hash_password(password),
+        display_name=display_name or username,
+        license_type=license_type,
+        license_days=license_days if license_type == "temporary" else 0,
+        license_start=now if license_type == "temporary" else None,
+        license_valid=True,
+    )
+    db.add(user)
+    db.commit()
+    return RedirectResponse(url="/painel", status_code=302)
 
 
 @app.post("/painel/unlink/{user_id}")

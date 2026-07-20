@@ -1,15 +1,5 @@
 {
-  "builds": [
-    {
-      "src": "api/index.py",
-      "use": "@vercel/python",
-      "config": { "maxLambdaSize": "15mb" }
-    }
-  ],
-  "routes": [
-    { "src": "/", "dest": "api/index.py" },
-    { "src": "/api/(.*)", "dest": "api/index.py" },
-    { "src": "/painel(.*)", "dest": "api/index.py" },
-    { "src": "/health", "dest": "api/index.py" }
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/api/index.py" }
   ]
 }
