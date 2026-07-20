@@ -3,277 +3,721 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Mobilador - Admin Keys</title>
+<title>{% if logged %}Mobilador - Painel{% else %}Mobilador - Login{% endif %}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Segoe UI', Arial, sans-serif; background: #0d0d0d; color: #e0e0e0; min-height: 100vh; }
-    .container { max-width: 1100px; margin: 0 auto; padding: 40px 20px; }
-    h1 { color: #00d4ff; font-size: 28px; text-align: center; margin-bottom: 8px; letter-spacing: 2px; }
-    .subtitle { text-align: center; color: #9e9e9e; font-size: 14px; margin-bottom: 32px; }
-    .card { background: #1a1a1a; border: 1px solid #333; border-radius: 12px; padding: 24px; margin-bottom: 24px; }
-    .card h2 { color: #00d4ff; font-size: 18px; margin-bottom: 16px; letter-spacing: 1px; }
-    label { display: block; color: #9e9e9e; font-size: 13px; margin-bottom: 4px; }
-    input, select { width: 100%; padding: 10px 12px; background: #0d0d0d; border: 1px solid #333; border-radius: 8px;
-            color: #e0e0e0; font-size: 14px; margin-bottom: 12px; outline: none; }
-    input:focus, select:focus { border-color: #00d4ff; }
-    .row { display: flex; gap: 12px; flex-wrap: wrap; }
-    .row > * { flex: 1; min-width: 140px; }
-    button, .btn { background: #00d4ff; color: #0d0d0d; border: none; border-radius: 8px; padding: 10px 24px;
-                   font-size: 14px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block; }
-    button:hover, .btn:hover { opacity: 0.85; }
-    .btn-danger { background: #ff4081; }
-    .btn-warning { background: #ffab00; color: #0d0d0d; }
-    .btn-outline { background: transparent; border: 1px solid #333; color: #e0e0e0; }
-    .btn-small { padding: 6px 14px; font-size: 12px; }
-    table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    th { text-align: left; padding: 10px 8px; color: #9e9e9e; font-weight: normal; font-size: 11px; border-bottom: 1px solid #333; }
-    td { padding: 10px 8px; border-bottom: 1px solid #222; vertical-align: middle; }
-    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; }
-    .badge-ok { background: #00c85333; color: #00c853; }
-    .badge-exp { background: #ff408133; color: #ff4081; }
-    .badge-admin { background: #00d4ff33; color: #00d4ff; }
-    .badge-locked { background: #ffab0033; color: #ffab00; }
-    .badge-free { background: #9e9e9e33; color: #9e9e9e; }
-    .badge-permanent { background: #00d4ff33; color: #00d4ff; }
-    .badge-temp { background: #ffab0033; color: #ffab00; }
-    .error { color: #ff4081; font-size: 13px; margin-bottom: 12px; text-align: center; }
-    .success { color: #00c853; font-size: 13px; margin-bottom: 12px; text-align: center; }
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-    .header span { color: #9e9e9e; font-size: 13px; }
-    .ip-box { background: #0d0d0d; border: 1px solid #333; border-radius: 8px; padding: 12px 16px;
-              font-family: monospace; font-size: 14px; color: #00d4ff; margin-bottom: 16px; text-align: center; }
-    .ip-box span { color: #9e9e9e; font-size: 12px; display: block; margin-bottom: 4px; }
-    .key-code { font-family: monospace; font-size: 14px; color: #ffab00; letter-spacing: 1px; font-weight: bold; }
-    .actions { display: flex; gap: 4px; flex-wrap: wrap; }
-    .tab-bar { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
-    .tab-btn { background: transparent; border: 1px solid #333; color: #9e9e9e; padding: 8px 20px; border-radius: 8px; cursor: pointer; font-size: 13px; }
-    .tab-btn.active { background: #00d4ff; color: #0d0d0d; border-color: #00d4ff; font-weight: bold; }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
-    .inline-form { display: inline; }
-    .created-box { background:#0d0d0d; border:1px solid #00c853; border-radius:8px; padding:16px; font-family:monospace; }
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --red:#E50914;
+  --red-2:#F6121D;
+  --red-dark:#831010;
+  --black:#000000;
+  --bg:#0B0B0B;
+  --bg-2:#161616;
+  --bg-3:#1F1F1F;
+  --bg-4:#2A2A2A;
+  --line:#262626;
+  --line-2:#333333;
+  --text:#F5F5F1;
+  --text-2:#B3B3B3;
+  --text-3:#808080;
+  --green:#46D369;
+  --yellow:#F5C518;
+  --orange:#FF9800;
+  --shadow:0 8px 24px rgba(0,0,0,.6);
+}
+html,body{height:100%}
+body{
+  font-family:'Inter','Helvetica Neue',Arial,sans-serif;
+  background:var(--black);
+  color:var(--text);
+  -webkit-font-smoothing:antialiased;
+  letter-spacing:.1px;
+}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+
+/* === LOGIN SCREEN === */
+.login-screen{
+  min-height:100vh;
+  background:
+    linear-gradient(180deg,rgba(0,0,0,.85) 0%,rgba(0,0,0,.4) 60%,rgba(0,0,0,.9) 100%),
+    radial-gradient(ellipse at 30% 30%,rgba(229,9,20,.25),transparent 60%),
+    radial-gradient(ellipse at 70% 70%,rgba(70,211,105,.12),transparent 60%),
+    #000;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:24px;
+  position:relative;
+  overflow:hidden;
+}
+.login-screen::before{
+  content:"";
+  position:absolute;inset:0;
+  background-image:
+    linear-gradient(rgba(255,255,255,.02) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(255,255,255,.02) 1px,transparent 1px);
+  background-size:60px 60px;
+  pointer-events:none;
+}
+.login-box{
+  background:rgba(0,0,0,.75);
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:48px 40px;
+  width:100%;
+  max-width:380px;
+  position:relative;
+  z-index:1;
+  box-shadow:var(--shadow);
+}
+.login-logo{
+  font-size:32px;
+  font-weight:900;
+  letter-spacing:-1px;
+  color:var(--red);
+  margin-bottom:28px;
+  text-align:center;
+}
+.login-logo span{color:var(--text);font-weight:400}
+.login-title{
+  font-size:28px;font-weight:700;
+  margin-bottom:24px;
+  color:var(--text);
+}
+.field{margin-bottom:14px}
+.field label{
+  display:block;
+  font-size:12px;
+  color:var(--text-2);
+  margin-bottom:6px;
+  text-transform:uppercase;
+  letter-spacing:.8px;
+}
+.field input{
+  width:100%;
+  background:#333;
+  border:1px solid transparent;
+  border-radius:4px;
+  padding:14px 16px;
+  color:var(--text);
+  font-size:15px;
+  outline:none;
+  transition:.2s;
+}
+.field input:focus{
+  background:#454545;
+  border-color:var(--red);
+}
+.btn-net{
+  width:100%;
+  background:var(--red);
+  color:#fff;
+  padding:14px;
+  border-radius:4px;
+  font-size:16px;
+  font-weight:600;
+  margin-top:18px;
+  transition:.15s;
+  letter-spacing:.3px;
+}
+.btn-net:hover{background:var(--red-2)}
+.btn-net:active{transform:scale(.98)}
+.btn-net:disabled{background:var(--red-dark);cursor:not-allowed}
+.login-error{
+  background:rgba(229,9,20,.15);
+  border:1px solid var(--red);
+  color:#fff;
+  padding:10px 14px;
+  border-radius:4px;
+  font-size:13px;
+  margin-bottom:16px;
+  text-align:center;
+}
+.login-hint{
+  text-align:center;
+  color:var(--text-3);
+  font-size:12px;
+  margin-top:20px;
+}
+.login-bot{
+  position:absolute;bottom:16px;left:0;right:0;
+  text-align:center;color:var(--text-3);font-size:12px;
+  z-index:1;
+}
+
+/* === HEADER (NETFLIX TOP NAV) === */
+.app-header{
+  position:sticky;top:0;z-index:50;
+  height:64px;
+  background:linear-gradient(180deg,rgba(0,0,0,.95) 0%,rgba(0,0,0,.7) 100%);
+  border-bottom:1px solid var(--line);
+  display:flex;align-items:center;
+  padding:0 48px;
+  backdrop-filter:blur(8px);
+}
+.brand{
+  font-size:22px;font-weight:900;
+  letter-spacing:-0.5px;
+  color:var(--red);
+  display:flex;align-items:center;gap:8px;
+}
+.brand small{color:var(--text-2);font-weight:400;font-size:13px;letter-spacing:.5px}
+.brand-divider{
+  width:1px;height:20px;background:var(--line-2);margin:0 14px;
+}
+.nav-tabs{display:flex;gap:4px;flex:1}
+.nav-tabs button{
+  padding:8px 14px;
+  font-size:14px;font-weight:500;
+  color:var(--text-2);
+  border-radius:4px;
+  transition:.15s;
+}
+.nav-tabs button:hover{color:var(--text);background:var(--bg-3)}
+.nav-tabs button.active{
+  color:#000;background:var(--red);font-weight:600;
+}
+.nav-right{display:flex;align-items:center;gap:14px}
+.user-chip{
+  display:flex;align-items:center;gap:8px;
+  font-size:13px;color:var(--text-2);
+}
+.user-chip .avatar{
+  width:32px;height:32px;border-radius:50%;
+  background:linear-gradient(135deg,var(--red),var(--red-dark));
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;color:#fff;font-size:13px;
+}
+.btn-logout{
+  padding:7px 14px;
+  font-size:12px;font-weight:600;
+  border:1px solid var(--line-2);
+  border-radius:4px;
+  color:var(--text-2);
+  transition:.15s;
+}
+.btn-logout:hover{color:#fff;background:var(--bg-3)}
+
+/* === HERO === */
+.hero{
+  padding:32px 48px 20px;
+  background:
+    linear-gradient(180deg,rgba(0,0,0,.6) 0%,transparent 100%),
+    radial-gradient(ellipse at 80% 0%,rgba(229,9,20,.18),transparent 60%);
+}
+.hero h1{
+  font-size:32px;font-weight:800;
+  margin-bottom:6px;
+  letter-spacing:-0.5px;
+}
+.hero p{color:var(--text-2);font-size:14px}
+.hero-grid{
+  display:grid;grid-template-columns:repeat(4,1fr);
+  gap:14px;
+  margin-top:20px;
+}
+.stat-card{
+  background:linear-gradient(135deg,var(--bg-2),var(--bg));
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:14px 16px;
+  position:relative;
+  overflow:hidden;
+}
+.stat-card::before{
+  content:"";position:absolute;top:0;left:0;width:3px;height:100%;
+  background:var(--red);
+}
+.stat-label{
+  font-size:11px;color:var(--text-3);
+  text-transform:uppercase;letter-spacing:.8px;
+  margin-bottom:4px;
+}
+.stat-value{
+  font-size:24px;font-weight:800;color:var(--text);
+  font-family:'JetBrains Mono',monospace;
+}
+.stat-value.red{color:var(--red)}
+.stat-value.green{color:var(--green)}
+.stat-value.yellow{color:var(--yellow)}
+
+/* === URL TICKER === */
+.url-ticker{
+  margin:0 48px;
+  background:var(--bg);
+  border:1px solid var(--line);
+  border-left:3px solid var(--red);
+  border-radius:4px;
+  padding:10px 16px;
+  display:flex;align-items:center;justify-content:space-between;
+  font-size:13px;
+  margin-bottom:18px;
+}
+.url-ticker .url-label{color:var(--text-3);font-size:11px;text-transform:uppercase;letter-spacing:.8px}
+.url-ticker .url-val{
+  font-family:'JetBrains Mono',monospace;color:var(--text);
+  flex:1;margin:0 16px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.url-ticker .copy-btn{
+  padding:6px 12px;font-size:11px;font-weight:600;
+  border:1px solid var(--line-2);border-radius:3px;
+  color:var(--text-2);
+  transition:.15s;
+}
+.url-ticker .copy-btn:hover{color:#fff;background:var(--bg-3)}
+
+/* === MAIN / ROWS === */
+.main{padding:0 48px 40px}
+.section-row{margin-bottom:32px}
+.section-title{
+  font-size:18px;font-weight:700;
+  margin-bottom:12px;
+  display:flex;align-items:center;gap:10px;
+}
+.section-title::before{
+  content:"";width:4px;height:18px;background:var(--red);
+  border-radius:2px;
+}
+.section-title small{color:var(--text-3);font-weight:400;font-size:13px;margin-left:auto}
+
+/* === GENERATE CARD === */
+.gen-grid{
+  display:grid;
+  grid-template-columns:2fr 1fr;
+  gap:14px;
+}
+.gen-card{
+  background:var(--bg-2);
+  border:1px solid var(--line);
+  border-radius:6px;
+  padding:18px 20px;
+}
+.gen-info{display:flex;flex-direction:column;gap:8px}
+.gen-info .row2{display:flex;gap:12px}
+.gen-info .col2{flex:1;display:flex;flex-direction:column;gap:4px}
+.gen-info label{
+  font-size:11px;color:var(--text-3);
+  text-transform:uppercase;letter-spacing:.8px;
+  margin-bottom:2px;
+}
+.gen-info input,.gen-info select{
+  background:#333;
+  border:1px solid transparent;
+  border-radius:4px;
+  padding:10px 12px;
+  color:var(--text);
+  font-size:14px;
+  outline:none;
+  font-family:inherit;
+  transition:.15s;
+}
+.gen-info input:focus,.gen-info select:focus{
+  background:#454545;border-color:var(--red);
+}
+.gen-action{
+  background:var(--red);
+  color:#fff;
+  border-radius:4px;
+  padding:14px;
+  font-size:14px;font-weight:700;
+  letter-spacing:.5px;
+  transition:.15s;
+  margin-top:auto;
+}
+.gen-action:hover{background:var(--red-2)}
+
+/* === KEYS CREATED === */
+.created-card{
+  background:linear-gradient(135deg,rgba(70,211,105,.08),rgba(70,211,105,.02));
+  border:1px solid var(--green);
+  border-radius:6px;
+  padding:16px 20px;
+  margin-bottom:14px;
+}
+.created-card h3{
+  color:var(--green);font-size:14px;font-weight:700;
+  margin-bottom:8px;letter-spacing:.3px;
+}
+.created-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 0;
+  border-bottom:1px dashed var(--line);
+  gap:12px;
+}
+.created-row:last-child{border-bottom:none}
+.created-row code{
+  font-family:'JetBrains Mono',monospace;
+  font-size:14px;
+  color:var(--yellow);
+  letter-spacing:1px;
+  word-break:break-all;
+  flex:1;
+}
+.created-copy{font-size:12px;color:var(--text-2);padding:4px 10px;border:1px solid var(--line-2);border-radius:3px}
+.created-copy:hover{color:#fff;background:var(--bg-3)}
+.created-note{
+  margin-top:10px;font-size:12px;color:var(--text-3);
+  text-align:center;
+}
+
+/* === KEYS TABLE === */
+.keys-table{
+  width:100%;
+  background:var(--bg-2);
+  border:1px solid var(--line);
+  border-radius:6px;
+  overflow:hidden;
+}
+.keys-thead{
+  display:grid;
+  grid-template-columns:2fr 1fr 1fr 1fr 1.5fr 1.5fr;
+  padding:10px 16px;
+  background:var(--bg);
+  border-bottom:1px solid var(--line);
+  font-size:11px;color:var(--text-3);
+  text-transform:uppercase;letter-spacing:.8px;
+  font-weight:600;
+  gap:10px;
+}
+.keys-row{
+  display:grid;
+  grid-template-columns:2fr 1fr 1fr 1fr 1.5fr 1.5fr;
+  padding:12px 16px;
+  border-bottom:1px solid var(--line);
+  font-size:13px;
+  align-items:center;
+  gap:10px;
+  transition:.15s;
+}
+.keys-row:hover{background:var(--bg-3)}
+.keys-row:last-child{border-bottom:none}
+.keys-row .key-cell{
+  font-family:'JetBrains Mono',monospace;
+  color:var(--yellow);font-weight:600;
+  letter-spacing:.5px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.keys-row .device-cell{
+  font-family:'JetBrains Mono',monospace;
+  font-size:11px;color:var(--text-3);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.keys-row .actions{display:flex;gap:4px;flex-wrap:wrap}
+.tag{
+  display:inline-block;
+  padding:3px 8px;
+  border-radius:3px;
+  font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.5px;
+}
+.tag-perm{background:rgba(229,9,20,.15);color:var(--red)}
+.tag-temp{background:rgba(245,197,24,.15);color:var(--yellow)}
+.tag-free{background:rgba(128,128,128,.15);color:var(--text-2)}
+.tag-active{background:rgba(70,211,105,.18);color:var(--green)}
+.tag-locked{background:rgba(245,197,24,.18);color:var(--orange)}
+.tag-revoked{background:rgba(229,9,20,.15);color:var(--red)}
+.tag-admin{background:rgba(229,9,20,.18);color:var(--red-2)}
+
+.btn-mini{
+  padding:5px 9px;border-radius:3px;
+  font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.5px;
+  border:1px solid transparent;
+  transition:.15s;
+}
+.btn-mini.reset{background:rgba(245,197,24,.15);color:var(--yellow);border-color:rgba(245,197,24,.3)}
+.btn-mini.reset:hover{background:rgba(245,197,24,.28)}
+.btn-mini.revoke{background:rgba(229,9,20,.12);color:var(--red);border-color:rgba(229,9,20,.3)}
+.btn-mini.revoke:hover{background:rgba(229,9,20,.22)}
+.btn-mini.del{background:transparent;color:var(--text-3);border-color:var(--line-2)}
+.btn-mini.del:hover{color:var(--red);border-color:var(--red)}
+
+.empty-state{
+  padding:48px 24px;
+  text-align:center;color:var(--text-3);
+  background:var(--bg-2);
+  border:1px dashed var(--line-2);
+  border-radius:6px;
+}
+.empty-state .empty-icon{
+  font-size:36px;margin-bottom:10px;opacity:.5;
+}
+
+@media(max-width:900px){
+  .app-header{padding:0 16px}
+  .hero,.main,.url-ticker{margin-left:16px;margin-right:16px;padding-left:0;padding-right:0}
+  .hero-grid{grid-template-columns:repeat(2,1fr)}
+  .gen-grid{grid-template-columns:1fr}
+  .keys-thead,.keys-row{
+    grid-template-columns:1fr 1fr 1.5fr;
+    font-size:11px;
+  }
+  .keys-thead .h-key,.keys-row .key-cell{grid-column:1/3}
+  .nav-tabs{display:none}
+}
 </style>
 </head>
 <body>
-<div class="container">
-    <h1>MOBILADOR</h1>
-    <p class="subtitle">Painel de Keys</p>
 
-    {% if not logged %}
-    <div class="card">
-        <h2>Login Admin</h2>
-        {% if error %}<div class="error">{{ error }}</div>{% endif %}
-        <form method="post" action="/api/painel/login">
-            <label>Usuario</label>
-            <input type="text" name="username" required value="admin">
-            <label>Senha</label>
-            <input type="password" name="password" required>
-            <button type="submit">ENTRAR</button>
-        </form>
-    </div>
-
-    {% else %}
-
-    <div class="header">
-        <span>Admin: <strong>{{ admin_user.display_name }}</strong></span>
-        <a href="/api/painel/logout" class="btn btn-outline" style="padding:6px 16px;font-size:12px;">Sair</a>
-    </div>
-
-    <div class="ip-box">
-        <span>URL do servidor (app):</span>
-        <span id="serverUrl">{{ public_url or request.base_url }}</span>
-        <button type="button" onclick="copyUrl()" style="margin-top:8px;padding:6px 16px;font-size:12px;">Copiar URL</button>
-    </div>
-
-    <div class="tab-bar">
-        <button type="button" class="tab-btn active" onclick="switchTab('keys', this)">Gerar Keys</button>
-        <button type="button" class="tab-btn" onclick="switchTab('lista', this)">Lista de Keys</button>
-        <button type="button" class="tab-btn" onclick="switchTab('usuarios', this)">Usuarios</button>
-    </div>
-
-    <div id="tab-keys" class="tab-content active">
-        {% if created_keys %}
-        <div class="card" style="border-color:#00c853;">
-            <h2 style="color:#00c853;">Keys geradas!</h2>
-            <p class="success">Tipo: {{ created_license_type }}</p>
-            <div class="created-box" id="chaveTexto">
-                {% for k in created_keys %}
-                <div class="key-code">{{ k }}</div>
-                {% endfor %}
-            </div>
-            <button type="button" onclick="copiarChave()" style="margin-top:12px;">Copiar Keys</button>
-            <p style="margin-top:12px;color:#9e9e9e;font-size:13px;">No app o cliente cola so a KEY. Sem usuario/senha.</p>
-        </div>
-        {% endif %}
-
-        <div class="card">
-            <h2>Gerar Keys de Acesso</h2>
-            {% if error %}<div class="error">{{ error }}</div>{% endif %}
-            <form method="post" action="/api/painel/generate-keys">
-                <div class="row">
-                    <div>
-                        <label>Quantidade</label>
-                        <input type="number" name="quantity" value="1" min="1" max="50">
-                    </div>
-                    <div>
-                        <label>Nome / Cliente (opcional)</label>
-                        <input type="text" name="label" placeholder="Ex: Joao">
-                    </div>
-                </div>
-                <div class="row">
-                    <div>
-                        <label>Tipo</label>
-                        <select name="license_type" id="licenseType" onchange="toggleDays()">
-                            <option value="permanent">Permanente</option>
-                            <option value="temporary">Temporaria (dias)</option>
-                        </select>
-                    </div>
-                    <div id="daysField" style="display:none">
-                        <label>Dias</label>
-                        <input type="number" name="license_days" value="30" min="1" max="36500">
-                    </div>
-                </div>
-                <button type="submit">GERAR KEY</button>
-            </form>
-        </div>
-    </div>
-
-    <div id="tab-lista" class="tab-content">
-        <div class="card">
-            <h2>Keys ({{ keys|length if keys else 0 }})</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>KEY</th>
-                        <th>Label</th>
-                        <th>Tipo</th>
-                        <th>Status</th>
-                        <th>Dispositivo</th>
-                        <th>Acoes</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for k in keys or [] %}
-                    <tr>
-                        <td><span class="key-code">{{ k.key_code }}</span></td>
-                        <td>{{ k.label }}</td>
-                        <td>
-                            {% if k.license_type == "permanent" %}
-                            <span class="badge badge-permanent">Permanente</span>
-                            {% else %}
-                            <span class="badge badge-temp">{{ k.license_days }} dias</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if not k.is_active %}
-                            <span class="badge badge-exp">Revogada</span>
-                            {% elif k.device_id %}
-                            <span class="badge badge-locked">Ativa</span>
-                            {% else %}
-                            <span class="badge badge-free">Livre</span>
-                            {% endif %}
-                        </td>
-                        <td style="font-family:monospace;font-size:10px;color:#9e9e9e;">
-                            {{ k.device_id[:18] + '...' if k.device_id else '—' }}
-                        </td>
-                            <td>
-                                <div class="actions">
-                                    <form class="inline-form" method="post" action="/api/painel/key-reset/{{ k.id }}" onsubmit="return confirm('Resetar key {{ k.key_code }}?')">
-                                        <button class="btn btn-warning btn-small">Resetar</button>
-                                    </form>
-                                    {% if k.is_active and k.device_id %}
-                                    <form class="inline-form" method="post" action="/api/painel/key-revoke/{{ k.id }}" onsubmit="return confirm('Revogar key {{ k.key_code }}?')">
-                                        <button class="btn btn-danger btn-small">Revogar</button>
-                                    </form>
-                                    {% endif %}
-                                    <form class="inline-form" method="post" action="/api/painel/key-delete/{{ k.id }}" onsubmit="return confirm('Deletar key {{ k.key_code }} permanentemente?')">
-                                        <button class="btn btn-danger btn-small">Deletar</button>
-                                    </form>
-                                </div>
-                            </td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="6" style="color:#9e9e9e;">Nenhuma key ainda. Gere na aba Gerar Keys.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <div id="tab-usuarios" class="tab-content">
-        <div class="card">
-            <h2>Usuarios ({{ users|length }})</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Usuario</th>
-                        <th>Key</th>
-                        <th>Licenca</th>
-                        <th>Device</th>
-                        <th>Acoes</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for u in users %}
-                    <tr>
-                        <td>{{ u.id }}</td>
-                        <td>{{ u.display_name or u.username }}{% if u.is_admin %} <span class="badge badge-admin">Admin</span>{% endif %}</td>
-                        <td class="key-code" style="font-size:11px;">{{ u.license_key or '—' }}</td>
-                        <td>
-                            {% if u.license_type == "permanent" %}
-                            <span class="badge badge-permanent">Permanente</span>
-                            {% else %}
-                            <span class="badge badge-temp">Temp</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if u.device_id %}
-                            <span class="badge badge-locked">Vinculado</span>
-                            {% else %}
-                            <span class="badge badge-free">Livre</span>
-                            {% endif %}
-                        </td>
-                        <td>
-                            {% if u.device_id and not u.is_admin %}
-                            <form class="inline-form" method="post" action="/api/painel/unlink/{{ u.id }}">
-                                <button class="btn btn-warning btn-small">Resetar</button>
-                            </form>
-                            {% endif %}
-                            {% if not u.is_admin %}
-                            <form class="inline-form" method="post" action="/api/painel/delete/{{ u.id }}" onsubmit="return confirm('Deletar?')">
-                                <button class="btn btn-danger btn-small">Del</button>
-                            </form>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-    {% endif %}
+{% if not logged %}
+<div class="login-screen">
+  <div class="login-box">
+    <div class="login-logo">MOBILADOR<span>.</span></div>
+    <h1 class="login-title">Entrar</h1>
+    {% if error %}<div class="login-error">{{ error }}</div>{% endif %}
+    <form method="post" action="/api/painel/login">
+      <div class="field">
+        <label>Usuário</label>
+        <input type="text" name="username" required autocomplete="username">
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" name="password" required autocomplete="current-password">
+      </div>
+      <button type="submit" class="btn-net">Entrar</button>
+    </form>
+    <div class="login-hint">Acesso restrito ao administrador</div>
+  </div>
+  <div class="login-bot">Mobilador &copy; 2026</div>
 </div>
+{% else %}
+
+<header class="app-header">
+  <div class="brand">MOBILADOR <small>Painel</small></div>
+  <div class="brand-divider"></div>
+  <nav class="nav-tabs">
+    <button class="{% if tab=='keys' %}active{% endif %}" onclick="location.href='?tab=keys'">Gerar</button>
+    <button class="{% if tab=='lista' %}active{% endif %}" onclick="location.href='?tab=lista'">Keys</button>
+    <button class="{% if tab=='usuarios' %}active{% endif %}" onclick="location.href='?tab=usuarios'">Usuários</button>
+  </nav>
+  <div class="nav-right">
+    <div class="user-chip">
+      <div class="avatar">{{ (admin_user.display_name or admin_user.username)[:1]|upper }}</div>
+      <span>{{ admin_user.display_name or admin_user.username }}</span>
+    </div>
+    <a href="/api/painel/logout" class="btn-logout">Sair</a>
+  </div>
+</header>
+
+<section class="hero">
+  <h1>{% if tab=='keys' %}Gerar Keys{% elif tab=='lista' %}Suas Keys{% else %}Usuários{% endif %}</h1>
+  <p>{% if tab=='keys' %}Crie e distribua chaves de acesso para o app Mobilador{% elif tab=='lista' %}Visualize e gerencie todas as chaves geradas{% else %}Clientes que ativaram licenças no app{% endif %}</p>
+
+  <div class="hero-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total de Keys</div>
+      <div class="stat-value red">{{ stats_total }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Ativas</div>
+      <div class="stat-value green">{{ stats_active }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Livres</div>
+      <div class="stat-value">{{ stats_free }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Usuários</div>
+      <div class="stat-value yellow">{{ stats_users }}</div>
+    </div>
+  </div>
+</section>
+
+<div class="url-ticker">
+  <span class="url-label">URL do servidor (app)</span>
+  <span class="url-val" id="serverUrl">{{ public_url or request.base_url }}</span>
+  <button class="copy-btn" onclick="copyUrl()">Copiar</button>
+</div>
+
+<main class="main">
+  {% if tab=='keys' %}
+    <div class="section-row">
+      <div class="section-title">Gerar Keys <small>Distribua o acesso</small></div>
+
+      {% if created_keys %}
+      <div class="created-card">
+        <h3>✓ Keys geradas com sucesso</h3>
+        <div class="created-row-wrap">
+          {% for k in created_keys %}
+          <div class="created-row">
+            <code>{{ k }}</code>
+            <button class="created-copy" onclick="copySingle('{{ k }}', this)">Copiar</button>
+          </div>
+          {% endfor %}
+        </div>
+        <button class="btn-net" style="width:auto;padding:8px 18px;margin-top:12px;font-size:13px" onclick="copiarChave()">Copiar Todas</button>
+        <p class="created-note">No app, o cliente cola apenas a KEY. Sem usuário/senha.</p>
+      </div>
+      {% endif %}
+
+      <form method="post" action="/api/painel/generate-keys" class="gen-grid">
+        <div class="gen-card">
+          <div class="gen-info">
+            <div class="row2">
+              <div class="col2">
+                <label>Quantidade</label>
+                <input type="number" name="quantity" value="1" min="1" max="50">
+              </div>
+              <div class="col2">
+                <label>Nome / Cliente (opcional)</label>
+                <input type="text" name="label" placeholder="Ex: João">
+              </div>
+            </div>
+            <div class="row2">
+              <div class="col2">
+                <label>Tipo</label>
+                <select name="license_type" id="licenseType" onchange="toggleDays()">
+                  <option value="permanent">Permanente</option>
+                  <option value="temporary">Temporária (dias)</option>
+                </select>
+              </div>
+              <div class="col2" id="daysField" style="display:none">
+                <label>Dias</label>
+                <input type="number" name="license_days" value="30" min="1" max="36500">
+              </div>
+            </div>
+          </div>
+        </div>
+        <button type="submit" class="gen-action">GERAR KEY</button>
+      </form>
+    </div>
+
+  {% elif tab=='lista' %}
+    <div class="section-row">
+      <div class="section-title">Todas as Keys <small>{{ keys|length if keys else 0 }} cadastradas</small></div>
+      {% if keys and keys|length > 0 %}
+      <div class="keys-table">
+        <div class="keys-thead">
+          <div class="h-key">KEY</div>
+          <div>Cliente</div>
+          <div>Tipo</div>
+          <div>Status</div>
+          <div>Dispositivo</div>
+          <div>Ações</div>
+        </div>
+        {% for k in keys %}
+        <div class="keys-row">
+          <div class="key-cell">{{ k.key_code }}</div>
+          <div>{{ k.label or '—' }}</div>
+          <div>
+            {% if k.license_type == "permanent" %}<span class="tag tag-perm">Permanente</span>
+            {% else %}<span class="tag tag-temp">{{ k.license_days }}d</span>{% endif %}
+          </div>
+          <div>
+            {% if not k.is_active %}<span class="tag tag-revoked">Revogada</span>
+            {% elif k.device_id %}<span class="tag tag-active">Ativa</span>
+            {% else %}<span class="tag tag-free">Livre</span>{% endif %}
+          </div>
+          <div class="device-cell">{{ k.device_id if k.device_id else '—' }}</div>
+          <div class="actions">
+            <form class="inline-form" method="post" action="/api/painel/key-reset/{{ k.id }}" onsubmit="return confirm('Resetar key {{ k.key_code }}?')">
+              <button class="btn-mini reset">Resetar</button>
+            </form>
+            {% if k.is_active and k.device_id %}
+            <form class="inline-form" method="post" action="/api/painel/key-revoke/{{ k.id }}" onsubmit="return confirm('Revogar key {{ k.key_code }}?')">
+              <button class="btn-mini revoke">Revogar</button>
+            </form>
+            {% endif %}
+            <form class="inline-form" method="post" action="/api/painel/key-delete/{{ k.id }}" onsubmit="return confirm('Deletar key {{ k.key_code }} permanentemente?')">
+              <button class="btn-mini del">Deletar</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">⌗</div>
+        Nenhuma key cadastrada. Gere na aba "Gerar".
+      </div>
+      {% endif %}
+    </div>
+
+  {% else %}
+    <div class="section-row">
+      <div class="section-title">Usuários <small>{{ users|length }} cadastrados</small></div>
+      {% if users and users|length > 0 %}
+      <div class="keys-table">
+        <div class="keys-thead" style="grid-template-columns:60px 2fr 2fr 1fr 1fr 1.5fr">
+          <div>ID</div>
+          <div>Usuário</div>
+          <div>Key</div>
+          <div>Tipo</div>
+          <div>Status</div>
+          <div>Ações</div>
+        </div>
+        {% for u in users %}
+        <div class="keys-row" style="grid-template-columns:60px 2fr 2fr 1fr 1fr 1.5fr">
+          <div>#{{ u.id }}</div>
+          <div>{{ u.display_name or u.username }}{% if u.is_admin %} <span class="tag tag-admin">ADMIN</span>{% endif %}</div>
+          <div class="key-cell">{{ u.license_key or '—' }}</div>
+          <div>
+            {% if u.license_type == "permanent" %}<span class="tag tag-perm">Permanente</span>
+            {% else %}<span class="tag tag-temp">Temp</span>{% endif %}
+          </div>
+          <div>
+            {% if u.device_id %}<span class="tag tag-locked">Vinculado</span>
+            {% else %}<span class="tag tag-free">Livre</span>{% endif %}
+          </div>
+          <div class="actions">
+            {% if u.device_id and not u.is_admin %}
+            <form class="inline-form" method="post" action="/api/painel/unlink/{{ u.id }}">
+              <button class="btn-mini reset">Resetar</button>
+            </form>
+            {% endif %}
+            {% if not u.is_admin %}
+            <form class="inline-form" method="post" action="/api/painel/delete/{{ u.id }}" onsubmit="return confirm('Deletar usuário?')">
+              <button class="btn-mini del">Deletar</button>
+            </form>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">◌</div>
+        Nenhum usuário ainda.
+      </div>
+      {% endif %}
+    </div>
+  {% endif %}
+</main>
+
 <script>
-function copyUrl() {
-    navigator.clipboard.writeText(document.getElementById('serverUrl').textContent.trim());
+function copyUrl(){
+  var t=document.getElementById('serverUrl').textContent.trim();
+  navigator.clipboard.writeText(t).then(function(){flash('URL copiada!')});
 }
-function switchTab(name, btn) {
-    document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById('tab-' + name).classList.add('active');
-    btn.classList.add('active');
+function copySingle(key,btn){
+  navigator.clipboard.writeText(key).then(function(){
+    var old=btn.textContent;btn.textContent='✓ Copiado';
+    setTimeout(function(){btn.textContent=old},1500);
+  });
 }
-function toggleDays() {
-    var sel = document.getElementById('licenseType');
-    document.getElementById('daysField').style.display = sel.value === 'temporary' ? 'block' : 'none';
+function copiarChave(){
+  var rows=document.querySelectorAll('.created-row code');
+  var keys=[];rows.forEach(function(r){keys.push(r.textContent.trim())});
+  navigator.clipboard.writeText(keys.join('\n')).then(function(){flash('Keys copiadas!')});
 }
-function copiarChave() {
-    var el = document.getElementById('chaveTexto');
-    navigator.clipboard.writeText(el.innerText.trim()).then(function() {
-        alert('Keys copiadas!');
-    });
+function flash(msg){
+  var d=document.createElement('div');
+  d.textContent=msg;
+  d.style.cssText='position:fixed;top:80px;right:24px;background:#E50914;color:#fff;padding:10px 18px;border-radius:4px;font-weight:600;z-index:9999;font-size:13px;box-shadow:0 4px 12px rgba(0,0,0,.5)';
+  document.body.appendChild(d);
+  setTimeout(function(){d.remove()},1800);
+}
+function toggleDays(){
+  var sel=document.getElementById('licenseType');
+  document.getElementById('daysField').style.display=sel.value==='temporary'?'flex':'none';
 }
 </script>
+
+{% endif %}
 </body>
 </html>

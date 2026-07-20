@@ -893,15 +893,22 @@ def _keys_view(db: Session):
 
 
 @app.get("/api/painel", response_class=HTMLResponse)
-def admin_panel(request: Request, db: Session = Depends(get_db)):
+def admin_panel(request: Request, tab: str = "keys", db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
         return render(request, logged=False)
+    keys_list = _keys_view(db)
+    users_list = db.query(UserDB).all()
     return render(request, **{
         "logged": True,
         "admin_user": admin,
-        "users": db.query(UserDB).all(),
-        "keys": _keys_view(db),
+        "users": users_list,
+        "keys": keys_list,
+        "tab": tab,
+        "stats_total": len(keys_list),
+        "stats_active": sum(1 for k in keys_list if k.is_active and k.device_id),
+        "stats_free": sum(1 for k in keys_list if k.is_active and not k.device_id),
+        "stats_users": len([u for u in users_list if not u.is_admin]),
         "format_date": format_date,
         "public_url": os.environ.get("PUBLIC_URL", os.environ.get("RENDER_EXTERNAL_URL", "")),
 })
@@ -935,13 +942,20 @@ def admin_generate_keys(
         db.add(row)
         created_keys.append(code)
     db.commit()
+    keys_list = _keys_view(db)
+    users_list = db.query(UserDB).all()
     return render(request, **{
         "logged": True,
         "admin_user": admin,
-        "users": db.query(UserDB).all(),
-        "keys": _keys_view(db),
+        "users": users_list,
+        "keys": keys_list,
         "created_keys": created_keys,
         "created_license_type": "Permanente" if license_type == "permanent" else f"Temporaria {license_days} dias",
+        "tab": "keys",
+        "stats_total": len(keys_list),
+        "stats_active": sum(1 for k in keys_list if k.is_active and k.device_id),
+        "stats_free": sum(1 for k in keys_list if k.is_active and not k.device_id),
+        "stats_users": len([u for u in users_list if not u.is_admin]),
         "format_date": format_date,
         "public_url": os.environ.get("PUBLIC_URL", ""),
 })
