@@ -357,7 +357,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Mobilador Server", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Mobilador Server", version="1.0.1", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
