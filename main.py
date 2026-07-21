@@ -1332,6 +1332,23 @@ def admin_logout():
 
 # ─── Site Content API (downloads + settings) ───
 
+@app.post("/api/migrate/columns")
+async def migrate_columns(db: Session = Depends(get_db)):
+    """Adiciona colunas novas que faltam em tabelas existentes."""
+    results = []
+    try:
+        # site_downloads.image
+        try:
+            db.execute(__import__('sqlalchemy').text("ALTER TABLE site_downloads ADD COLUMN IF NOT EXISTS image VARCHAR(500) DEFAULT '' NOT NULL"))
+            results.append("site_downloads.image OK")
+        except Exception as e:
+            results.append(f"site_downloads.image: {e}")
+        db.commit()
+        return {"results": results}
+    except Exception as e:
+        db.rollback()
+        return {"error": str(e), "results": results}
+
 class DownloadIn(BaseModel):
     title: str = ""
     description: str = ""
