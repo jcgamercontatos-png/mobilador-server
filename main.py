@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text, Float
 from sqlalchemy.orm import declarative_base, Session, sessionmaker
 
 DIR = os.path.dirname(os.path.abspath(__file__))
@@ -62,10 +62,28 @@ class Download(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     title = Column(String(255), default="")
     description = Column(Text, default="")
-    url = Column(String(512), nullable=False)
+    url = Column(Text, nullable=False)
     version = Column(String(50), default="")
     file_size = Column(String(50), default="")
     icon = Column(String(50), default="download")
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class Product(Base):
+    __tablename__ = "site_products"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False)
+    category = Column(String(100), default="")
+    price = Column(Float, default=0.0)
+    original_price = Column(Float, default=0.0, nullable=True)
+    rating = Column(Integer, default=5)
+    reviews = Column(Integer, default=0)
+    badge = Column(String(50), default="")
+    short_desc = Column(Text, default="")
+    description = Column(Text, default="")
+    specs = Column(Text, default="")
+    image = Column(String(500), default="")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -929,6 +947,7 @@ def admin_panel(request: Request, tab: str = "keys", db: Session = Depends(get_d
     downloads_list = db.query(Download).order_by(Download.id.desc()).all() if hasattr(Download, '__tablename__') else []
     settings_rows = db.query(SiteSetting).all() if hasattr(SiteSetting, '__tablename__') else []
     settings_dict = {r.key: r.value for r in settings_rows}
+    products_list = db.query(Product).order_by(Product.id.desc()).all() if hasattr(Product, '__tablename__') else []
     return render(request, **{
         "logged": True,
         "admin_user": admin,
@@ -936,6 +955,7 @@ def admin_panel(request: Request, tab: str = "keys", db: Session = Depends(get_d
         "keys": keys_list,
         "downloads": downloads_list,
         "settings": settings_dict,
+        "products": products_list,
         "tab": tab,
         "stats_total": len(keys_list),
         "stats_active": sum(1 for k in keys_list if k.get("is_active") and k.get("device_id")),
@@ -1187,6 +1207,45 @@ def admin_delete_download(did: int, request: Request, db: Session = Depends(get_
         db.commit()
     return RedirectResponse(url="/api/painel?tab=downloads", status_code=302)
 
+@app.post("/api/painel/products/create")
+def admin_create_product(request: Request, name: str = Form(""), category: str = Form(""),
+                         price: float = Form(0.0), original_price: float = Form(0.0),
+                         rating: int = Form(5), reviews: int = Form(0),
+                         badge: str = Form(""), short_desc: str = Form(""),
+                         description: str = Form(""), specs: str = Form(""),
+                         image: str = Form(""), db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/", status_code=302)
+    p = Product(name=name, category=category, price=price, original_price=original_price,
+                rating=rating, reviews=reviews, badge=badge, short_desc=short_desc,
+                description=description, specs=specs, image=image, is_active=True)
+    db.add(p)
+    db.commit()
+    return RedirectResponse(url="/api/painel?tab=produtos", status_code=302)
+
+@app.post("/api/painel/products/{pid}/toggle")
+def admin_toggle_product(pid: int, request: Request, db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/", status_code=302)
+    p = db.query(Product).filter(Product.id == pid).first()
+    if p:
+        p.is_active = not p.is_active
+        db.commit()
+    return RedirectResponse(url="/api/painel?tab=produtos", status_code=302)
+
+@app.post("/api/painel/products/{pid}/delete")
+def admin_delete_product(pid: int, request: Request, db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/", status_code=302)
+    p = db.query(Product).filter(Product.id == pid).first()
+    if p:
+        db.delete(p)
+        db.commit()
+    return RedirectResponse(url="/api/painel?tab=produtos", status_code=302)
+
 @app.post("/api/painel/settings")
 def admin_update_settings(request: Request, db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
@@ -1235,6 +1294,20 @@ class DownloadIn(BaseModel):
 class SettingIn(BaseModel):
     key: str
     value: str
+
+class ProductIn(BaseModel):
+    name: str = ""
+    category: str = ""
+    price: float = 0.0
+    original_price: float = 0.0
+    rating: int = 5
+    reviews: int = 0
+    badge: str = ""
+    short_desc: str = ""
+    description: str = ""
+    specs: str = ""
+    image: str = ""
+    is_active: bool = True
 
 @app.get("/api/site/downloads")
 def list_downloads():
@@ -1313,6 +1386,89 @@ def update_settings(data: list[SettingIn]):
                 existing.value = item.value
             else:
                 db.add(SiteSetting(key=item.key, value=item.value))
+        db.commit()
+        return {"ok": True}
+    finally:
+        db.close()
+
+# ─── Site Content API (products) ───
+
+@app.get("/api/site/products")
+def list_products():
+    db = SessionLocal()
+    try:
+        rows = db.query(Product).order_by(Product.id.desc()).all()
+        return [{
+            "id": r.id, "name": r.name, "category": r.category,
+            "price": r.price, "original_price": r.original_price,
+            "rating": r.rating, "reviews": r.reviews, "badge": r.badge,
+            "short_desc": r.short_desc, "description": r.description,
+            "specs": r.specs.split("\n") if r.specs else [],
+            "image": r.image, "is_active": r.is_active,
+            "created_at": r.created_at.isoformat() if r.created_at else "",
+        } for r in rows if r.is_active]
+    finally:
+        db.close()
+
+@app.get("/api/site/products/all")
+def list_products_all():
+    db = SessionLocal()
+    try:
+        rows = db.query(Product).order_by(Product.id.desc()).all()
+        return [{
+            "id": r.id, "name": r.name, "category": r.category,
+            "price": r.price, "original_price": r.original_price,
+            "rating": r.rating, "reviews": r.reviews, "badge": r.badge,
+            "short_desc": r.short_desc, "description": r.description,
+            "specs": r.specs.split("\n") if r.specs else [],
+            "image": r.image, "is_active": r.is_active,
+            "created_at": r.created_at.isoformat() if r.created_at else "",
+        } for r in rows]
+    finally:
+        db.close()
+
+@app.post("/api/site/products")
+def create_product(data: ProductIn):
+    db = SessionLocal()
+    try:
+        p = Product(
+            name=data.name, category=data.category,
+            price=data.price, original_price=data.original_price,
+            rating=data.rating, reviews=data.reviews, badge=data.badge,
+            short_desc=data.short_desc, description=data.description,
+            specs=data.specs, image=data.image, is_active=data.is_active,
+        )
+        db.add(p)
+        db.commit()
+        return {"id": p.id, "name": p.name}
+    finally:
+        db.close()
+
+@app.put("/api/site/products/{pid}")
+def update_product(pid: int, data: ProductIn):
+    db = SessionLocal()
+    try:
+        p = db.query(Product).filter(Product.id == pid).first()
+        if not p:
+            raise HTTPException(404, "Produto não encontrado")
+        p.name = data.name; p.category = data.category
+        p.price = data.price; p.original_price = data.original_price
+        p.rating = data.rating; p.reviews = data.reviews; p.badge = data.badge
+        p.short_desc = data.short_desc; p.description = data.description
+        p.specs = data.specs; p.image = data.image; p.is_active = data.is_active
+        db.commit()
+        return {"ok": True}
+    finally:
+        db.close()
+
+@app.delete("/api/site/products/{pid}")
+def delete_product(pid: int):
+    db = SessionLocal()
+    try:
+        p = db.query(Product).filter(Product.id == pid).first()
+        if not p:
+            raise HTTPException(404, "Produto não encontrado")
+        db.delete(p)
         db.commit()
         return {"ok": True}
     finally:
