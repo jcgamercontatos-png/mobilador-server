@@ -1247,14 +1247,11 @@ def admin_delete_product(pid: int, request: Request, db: Session = Depends(get_d
     return RedirectResponse(url="/api/painel?tab=produtos", status_code=302)
 
 @app.post("/api/painel/settings")
-def admin_update_settings(request: Request, db: Session = Depends(get_db)):
+async def admin_update_settings(request: Request, db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
         return RedirectResponse(url="/", status_code=302)
-    import json
-    body = request.body()
-    import asyncio
-    raw = asyncio.run(body()).decode()
+    raw = (await request.body()).decode()
     pairs = raw.split("&")
     for pair in pairs:
         if "=" not in pair:
