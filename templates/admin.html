@@ -504,6 +504,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
     <button class="{% if tab=='keys' %}active{% endif %}" onclick="location.href='?tab=keys'">Gerar</button>
     <button class="{% if tab=='lista' %}active{% endif %}" onclick="location.href='?tab=lista'">Keys</button>
     <button class="{% if tab=='usuarios' %}active{% endif %}" onclick="location.href='?tab=usuarios'">Usuários</button>
+    <button class="{% if tab=='downloads' %}active{% endif %}" onclick="location.href='?tab=downloads'">Downloads</button>
+    <button class="{% if tab=='config' %}active{% endif %}" onclick="location.href='?tab=config'">Site</button>
   </nav>
   <div class="nav-right">
     <div class="user-chip">
@@ -515,8 +517,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 </header>
 
 <section class="hero">
-  <h1>{% if tab=='keys' %}Gerar Keys{% elif tab=='lista' %}Suas Keys{% else %}Usuários{% endif %}</h1>
-  <p>{% if tab=='keys' %}Crie e distribua chaves de acesso para o app Mobilador{% elif tab=='lista' %}Visualize e gerencie todas as chaves geradas{% else %}Clientes que ativaram licenças no app{% endif %}</p>
+  <h1>{% if tab=='keys' %}Gerar Keys{% elif tab=='lista' %}Suas Keys{% elif tab=='downloads' %}Downloads{% elif tab=='config' %}Configurações do Site{% else %}Usuários{% endif %}</h1>
+  <p>{% if tab=='keys' %}Crie e distribua chaves de acesso para o app Mobilador{% elif tab=='lista' %}Visualize e gerencie todas as chaves geradas{% elif tab=='downloads' %}Gerencie os links de download do site{% elif tab=='config' %}Configure textos, links e conteúdo do site{% else %}Clientes que ativaram licenças no app{% endif %}</p>
 
   <div class="hero-grid">
     <div class="stat-card">
@@ -695,6 +697,105 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
         Nenhum usuário ainda.
       </div>
       {% endif %}
+    </div>
+  {% endif %}
+
+  {% if tab=='downloads' %}
+    <div class="section-row">
+      <div class="section-title">Gerenciar Downloads</div>
+      <p class="section-desc" style="color:var(--text-2);font-size:14px;margin-bottom:20px">Adicione links de APK ou arquivos para aparecerem na página de download do site.</p>
+
+      <form method="post" action="/api/painel/downloads/create" class="gen-grid" style="margin-bottom:32px">
+        <div class="gen-card" style="grid-column:1/-1">
+          <div class="gen-title">Novo Download</div>
+          <div class="gen-form">
+            <label>Título <input type="text" name="title" placeholder="Ex: GG Mouse Pro" required></label>
+            <label>Descrição <input type="text" name="description" placeholder="Breve descrição"></label>
+            <label>URL do Download <input type="url" name="url" placeholder="https://..." required></label>
+            <label>Versão <input type="text" name="version" placeholder="v2.0"></label>
+            <label>Tamanho <input type="text" name="file_size" placeholder="20MB"></label>
+            <label>Ícone <select name="icon">
+              <option value="download">Download</option>
+              <option value="smartphone">Smartphone</option>
+              <option value="gamepad">Gamepad</option>
+              <option value="shield">Shield</option>
+              <option value="star">Star</option>
+            </select></label>
+            <button type="submit" class="btn-net">Adicionar Download</button>
+          </div>
+        </div>
+      </form>
+
+      <div style="background:var(--bg-2);border:1px solid var(--line);border-radius:6px;overflow:hidden">
+        <table style="width:100%;border-collapse:collapse;font-size:14px">
+          <thead>
+            <tr style="background:var(--bg-3);color:var(--text-2)">
+              <th style="padding:12px 16px;text-align:left">Título</th>
+              <th style="padding:12px 16px;text-align:left">Versão</th>
+              <th style="padding:12px 16px;text-align:left">URL</th>
+              <th style="padding:12px 16px;text-align:left">Ativo</th>
+              <th style="padding:12px 16px;text-align:center">Ações</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for d in downloads %}
+            <tr style="border-top:1px solid var(--line)">
+              <td style="padding:12px 16px">{{ d.title }}</td>
+              <td style="padding:12px 16px;color:var(--text-2)">{{ d.version }}</td>
+              <td style="padding:12px 16px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                <a href="{{ d.url }}" target="_blank" style="color:var(--red)">{{ d.url }}</a>
+              </td>
+              <td style="padding:12px 16px">
+                {% if d.is_active %}
+                  <span style="color:var(--green)">● Ativo</span>
+                {% else %}
+                  <span style="color:var(--text-3)">● Inativo</span>
+                {% endif %}
+              </td>
+              <td style="padding:12px 16px;text-align:center">
+                <form method="post" action="/api/painel/downloads/{{ d.id }}/toggle" style="display:inline">
+                  <button type="submit" style="color:var(--yellow);font-size:12px;padding:4px 10px;background:var(--bg-3);border-radius:4px;margin-right:4px">
+                    {% if d.is_active %}Desativar{% else %}Ativar{% endif %}
+                  </button>
+                </form>
+                <form method="post" action="/api/painel/downloads/{{ d.id }}/delete" style="display:inline" onsubmit="return confirm('Excluir este download?')">
+                  <button type="submit" style="color:var(--red);font-size:12px;padding:4px 10px;background:var(--bg-3);border-radius:4px">Excluir</button>
+                </form>
+              </td>
+            </tr>
+            {% else %}
+            <tr>
+              <td colspan="5" style="padding:40px;text-align:center;color:var(--text-3)">
+                Nenhum download cadastrado. Adicione o primeiro acima.
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  {% endif %}
+
+  {% if tab=='config' %}
+    <div class="section-row">
+      <div class="section-title">Configurações do Site</div>
+      <p class="section-desc" style="color:var(--text-2);font-size:14px;margin-bottom:20px">Personalize os textos, links e conteúdo exibidos no site www.jcgameryt.com.br</p>
+
+      <form method="post" action="/api/painel/settings" class="gen-grid">
+        <div class="gen-card" style="grid-column:1/-1">
+          <div class="gen-title">Conteúdo da Home</div>
+          <div class="gen-form">
+            <label>Título Principal <input type="text" name="hero_title" value="{{ settings.get('hero_title','') }}" placeholder="MOBILADOR"></label>
+            <label>Subtítulo <input type="text" name="hero_subtitle" value="{{ settings.get('hero_subtitle','') }}" placeholder="Transforme seu celular..."></label>
+            <label>Link do YouTube <input type="url" name="youtube_url" value="{{ settings.get('youtube_url','') }}" placeholder="https://youtube.com/@..."></label>
+            <label>Link do Instagram <input type="url" name="instagram_url" value="{{ settings.get('instagram_url','') }}" placeholder="https://instagram.com/..."></label>
+            <label>Link do Discord <input type="url" name="discord_url" value="{{ settings.get('discord_url','') }}" placeholder="https://discord.gg/..."></label>
+            <label>Link do WhatsApp <input type="url" name="whatsapp_url" value="{{ settings.get('whatsapp_url','') }}" placeholder="https://wa.me/..."></label>
+            <label>E-mail de Contato <input type="email" name="contact_email" value="{{ settings.get('contact_email','') }}" placeholder="contato@..."></label>
+            <button type="submit" class="btn-net">Salvar Configurações</button>
+          </div>
+        </div>
+      </form>
     </div>
   {% endif %}
 </main>

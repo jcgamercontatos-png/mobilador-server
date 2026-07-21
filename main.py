@@ -49,6 +49,27 @@ class UserDB(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class SiteSetting(Base):
+    __tablename__ = "site_settings"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    key = Column(String(128), unique=True, nullable=False, index=True)
+    value = Column(Text, default="")
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class Download(Base):
+    __tablename__ = "site_downloads"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(255), default="")
+    description = Column(Text, default="")
+    url = Column(String(512), nullable=False)
+    version = Column(String(50), default="")
+    file_size = Column(String(50), default="")
+    icon = Column(String(50), default="download")
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class LicenseKeyDB(Base):
     __tablename__ = "license_keys"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -905,11 +926,16 @@ def admin_panel(request: Request, tab: str = "keys", db: Session = Depends(get_d
         return render(request, logged=False)
     keys_list = _keys_view(db)
     users_list = db.query(UserDB).all()
+    downloads_list = db.query(Download).order_by(Download.id.desc()).all() if hasattr(Download, '__tablename__') else []
+    settings_rows = db.query(SiteSetting).all() if hasattr(SiteSetting, '__tablename__') else []
+    settings_dict = {r.key: r.value for r in settings_rows}
     return render(request, **{
         "logged": True,
         "admin_user": admin,
         "users": users_list,
         "keys": keys_list,
+        "downloads": downloads_list,
+        "settings": settings_dict,
         "tab": tab,
         "stats_total": len(keys_list),
         "stats_active": sum(1 for k in keys_list if k.get("is_active") and k.get("device_id")),
@@ -917,7 +943,7 @@ def admin_panel(request: Request, tab: str = "keys", db: Session = Depends(get_d
         "stats_users": len([u for u in users_list if not u.is_admin]),
         "format_date": format_date,
         "public_url": os.environ.get("PUBLIC_URL", os.environ.get("RENDER_EXTERNAL_URL", "")),
-})
+    })
 
 
 @app.post("/api/painel/generate-keys")
@@ -1126,11 +1152,171 @@ def admin_delete(request: Request, user_id: int, db: Session = Depends(get_db)):
         return RedirectResponse(url="/", status_code=302)
 
 
+@app.post("/api/painel/downloads/create")
+def admin_create_download(request: Request, title: str = Form(""), description: str = Form(""),
+                          url: str = Form(...), version: str = Form(""), file_size: str = Form(""),
+                          icon: str = Form("download"), db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/", status_code=302)
+    d = Download(title=title, description=description, url=url, version=version,
+                 file_size=file_size, icon=icon, is_active=True)
+    db.add(d)
+    db.commit()
+    return RedirectResponse(url="/api/painel?tab=downloads", status_code=302)
+
+@app.post("/api/painel/downloads/{did}/toggle")
+def admin_toggle_download(did: int, request: Request, db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/", status_code=302)
+    d = db.query(Download).filter(Download.id == did).first()
+    if d:
+        d.is_active = not d.is_active
+        db.commit()
+    return RedirectResponse(url="/api/painel?tab=downloads", status_code=302)
+
+@app.post("/api/painel/downloads/{did}/delete")
+def admin_delete_download(did: int, request: Request, db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/", status_code=302)
+    d = db.query(Download).filter(Download.id == did).first()
+    if d:
+        db.delete(d)
+        db.commit()
+    return RedirectResponse(url="/api/painel?tab=downloads", status_code=302)
+
+@app.post("/api/painel/settings")
+def admin_update_settings(request: Request, db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/", status_code=302)
+    import json
+    body = request.body()
+    import asyncio
+    raw = asyncio.run(body()).decode()
+    pairs = raw.split("&")
+    for pair in pairs:
+        if "=" not in pair:
+            continue
+        key = pair.split("=", 1)[0]
+        value = pair.split("=", 1)[1]
+        from urllib.parse import unquote_plus
+        key = unquote_plus(key)
+        value = unquote_plus(value)
+        existing = db.query(SiteSetting).filter(SiteSetting.key == key).first()
+        if existing:
+            existing.value = value
+        else:
+            db.add(SiteSetting(key=key, value=value))
+    db.commit()
+    return RedirectResponse(url="/api/painel?tab=config", status_code=302)
+
+
 @app.get("/api/painel/logout")
 def admin_logout():
     response = RedirectResponse(url="/", status_code=302)
     response.delete_cookie("token")
     return response
+
+
+# ─── Site Content API (downloads + settings) ───
+
+class DownloadIn(BaseModel):
+    title: str = ""
+    description: str = ""
+    url: str
+    version: str = ""
+    file_size: str = ""
+    icon: str = "download"
+    is_active: bool = True
+
+class SettingIn(BaseModel):
+    key: str
+    value: str
+
+@app.get("/api/site/downloads")
+def list_downloads():
+    db = SessionLocal()
+    try:
+        rows = db.query(Download).order_by(Download.id.desc()).all()
+        return [{"id": r.id, "title": r.title, "description": r.description,
+                 "url": r.url, "version": r.version, "file_size": r.file_size,
+                 "icon": r.icon, "is_active": r.is_active, "created_at": r.created_at.isoformat()}
+                for r in rows]
+    finally:
+        db.close()
+
+@app.post("/api/site/downloads")
+def create_download(data: DownloadIn):
+    db = SessionLocal()
+    try:
+        d = Download(title=data.title, description=data.description, url=data.url,
+                     version=data.version, file_size=data.file_size, icon=data.icon,
+                     is_active=data.is_active)
+        db.add(d)
+        db.commit()
+        db.refresh(d)
+        return {"id": d.id, "title": d.title, "url": d.url}
+    finally:
+        db.close()
+
+@app.put("/api/site/downloads/{did}")
+def update_download(did: int, data: DownloadIn):
+    db = SessionLocal()
+    try:
+        d = db.query(Download).filter(Download.id == did).first()
+        if not d:
+            raise HTTPException(404, "Download não encontrado")
+        d.title = data.title
+        d.description = data.description
+        d.url = data.url
+        d.version = data.version
+        d.file_size = data.file_size
+        d.icon = data.icon
+        d.is_active = data.is_active
+        db.commit()
+        return {"ok": True}
+    finally:
+        db.close()
+
+@app.delete("/api/site/downloads/{did}")
+def delete_download(did: int):
+    db = SessionLocal()
+    try:
+        d = db.query(Download).filter(Download.id == did).first()
+        if not d:
+            raise HTTPException(404, "Download não encontrado")
+        db.delete(d)
+        db.commit()
+        return {"ok": True}
+    finally:
+        db.close()
+
+@app.get("/api/site/settings")
+def list_settings():
+    db = SessionLocal()
+    try:
+        rows = db.query(SiteSetting).all()
+        return {r.key: r.value for r in rows}
+    finally:
+        db.close()
+
+@app.post("/api/site/settings")
+def update_settings(data: list[SettingIn]):
+    db = SessionLocal()
+    try:
+        for item in data:
+            existing = db.query(SiteSetting).filter(SiteSetting.key == item.key).first()
+            if existing:
+                existing.value = item.value
+            else:
+                db.add(SiteSetting(key=item.key, value=item.value))
+        db.commit()
+        return {"ok": True}
+    finally:
+        db.close()
 
 
 if __name__ == "__main__":
