@@ -66,6 +66,7 @@ class Download(Base):
     version = Column(String(50), default="")
     file_size = Column(String(50), default="")
     icon = Column(String(50), default="download")
+    image = Column(String(500), default="")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -1175,12 +1176,12 @@ def admin_delete(request: Request, user_id: int, db: Session = Depends(get_db)):
 @app.post("/api/painel/downloads/create")
 def admin_create_download(request: Request, title: str = Form(""), description: str = Form(""),
                           url: str = Form(...), version: str = Form(""), file_size: str = Form(""),
-                          icon: str = Form("download"), db: Session = Depends(get_db)):
+                          icon: str = Form("download"), image: str = Form(""), db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
         return RedirectResponse(url="/", status_code=302)
     d = Download(title=title, description=description, url=url, version=version,
-                 file_size=file_size, icon=icon, is_active=True)
+                 file_size=file_size, icon=icon, image=image, is_active=True)
     db.add(d)
     db.commit()
     return RedirectResponse(url="/api/painel?tab=downloads", status_code=302)
@@ -1266,6 +1267,38 @@ def admin_edit_product(pid: int, request: Request, name: str = Form(""), categor
         db.commit()
     return RedirectResponse(url="/api/painel?tab=produtos", status_code=302)
 
+@app.post("/api/painel/downloads/{did}/edit")
+def admin_edit_download(did: int, request: Request, title: str = Form(""), description: str = Form(""),
+                        url: str = Form(...), version: str = Form(""), file_size: str = Form(""),
+                        icon: str = Form("download"), image: str = Form(""),
+                        is_active: bool = Form(True), db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/", status_code=302)
+    d = db.query(Download).filter(Download.id == did).first()
+    if d:
+        d.title = title; d.description = description; d.url = url
+        d.version = version; d.file_size = file_size; d.icon = icon
+        d.image = image; d.is_active = is_active
+        db.commit()
+    return RedirectResponse(url="/api/painel?tab=downloads", status_code=302)
+
+@app.post("/api/painel/downloads/{did}/edit")
+def admin_edit_download(did: int, request: Request, title: str = Form(""), description: str = Form(""),
+                        url: str = Form(...), version: str = Form(""), file_size: str = Form(""),
+                        icon: str = Form("download"), image: str = Form(""),
+                        is_active: bool = Form(True), db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/", status_code=302)
+    d = db.query(Download).filter(Download.id == did).first()
+    if d:
+        d.title = title; d.description = description; d.url = url
+        d.version = version; d.file_size = file_size; d.icon = icon
+        d.image = image; d.is_active = is_active
+        db.commit()
+    return RedirectResponse(url="/api/painel?tab=downloads", status_code=302)
+
 @app.post("/api/painel/settings")
 async def admin_update_settings(request: Request, db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
@@ -1307,6 +1340,7 @@ class DownloadIn(BaseModel):
     file_size: str = ""
     icon: str = "download"
     is_active: bool = True
+    image: str = ""
 
 class SettingIn(BaseModel):
     key: str
@@ -1333,7 +1367,7 @@ def list_downloads():
         rows = db.query(Download).order_by(Download.id.desc()).all()
         return [{"id": r.id, "title": r.title, "description": r.description,
                  "url": r.url, "version": r.version, "file_size": r.file_size,
-                 "icon": r.icon, "is_active": r.is_active, "created_at": r.created_at.isoformat()}
+                 "icon": r.icon, "image": r.image, "is_active": r.is_active, "created_at": r.created_at.isoformat()}
                 for r in rows]
     finally:
         db.close()
@@ -1344,7 +1378,7 @@ def create_download(data: DownloadIn):
     try:
         d = Download(title=data.title, description=data.description, url=data.url,
                      version=data.version, file_size=data.file_size, icon=data.icon,
-                     is_active=data.is_active)
+                     image=data.image, is_active=data.is_active)
         db.add(d)
         db.commit()
         db.refresh(d)
@@ -1365,6 +1399,7 @@ def update_download(did: int, data: DownloadIn):
         d.version = data.version
         d.file_size = data.file_size
         d.icon = data.icon
+        d.image = data.image
         d.is_active = data.is_active
         db.commit()
         return {"ok": True}
