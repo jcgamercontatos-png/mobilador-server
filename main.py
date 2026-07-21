@@ -1246,6 +1246,26 @@ def admin_delete_product(pid: int, request: Request, db: Session = Depends(get_d
         db.commit()
     return RedirectResponse(url="/api/painel?tab=produtos", status_code=302)
 
+@app.post("/api/painel/products/{pid}/edit")
+def admin_edit_product(pid: int, request: Request, name: str = Form(""), category: str = Form(""),
+                       price: float = Form(0.0), original_price: float = Form(0.0),
+                       rating: int = Form(5), reviews: int = Form(0),
+                       badge: str = Form(""), short_desc: str = Form(""),
+                       description: str = Form(""), specs: str = Form(""),
+                       image: str = Form(""), is_active: bool = Form(True),
+                       db: Session = Depends(get_db)):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/", status_code=302)
+    p = db.query(Product).filter(Product.id == pid).first()
+    if p:
+        p.name = name; p.category = category; p.price = price
+        p.original_price = original_price; p.rating = rating; p.reviews = reviews
+        p.badge = badge; p.short_desc = short_desc; p.description = description
+        p.specs = specs; p.image = image; p.is_active = is_active
+        db.commit()
+    return RedirectResponse(url="/api/painel?tab=produtos", status_code=302)
+
 @app.post("/api/painel/settings")
 async def admin_update_settings(request: Request, db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)

@@ -833,7 +833,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
                   <span style="color:var(--text-3)">● Inativo</span>
                 {% endif %}
               </td>
-              <td style="padding:12px 16px;text-align:center">
+              <td style="padding:12px 16px;text-align:center;white-space:nowrap">
+                <button onclick="abrirEdicao(this)" data-id="{{ p.id }}" data-name="{{ p.name|e }}" data-category="{{ p.category|e }}" data-price="{{ p.price }}" data-original_price="{{ p.original_price }}" data-rating="{{ p.rating }}" data-reviews="{{ p.reviews }}" data-badge="{{ p.badge|e }}" data-short_desc="{{ p.short_desc|e }}" data-description="{{ p.description|e }}" data-specs="{{ p.specs|e }}" data-image="{{ p.image|e }}" data-is_active="{{ p.is_active|lower }}" style="color:var(--blue);font-size:12px;padding:4px 10px;background:var(--bg-3);border-radius:4px;margin-right:4px">Editar</button>
                 <form method="post" action="/api/painel/products/{{ p.id }}/toggle" style="display:inline">
                   <button type="submit" style="color:var(--yellow);font-size:12px;padding:4px 10px;background:var(--bg-3);border-radius:4px;margin-right:4px">
                     {% if p.is_active %}Desativar{% else %}Ativar{% endif %}
@@ -881,7 +882,61 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
   {% endif %}
 </main>
 
+<div id="editModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.85);z-index:999;align-items:center;justify-content:center;padding:20px;overflow-y:auto" onclick="if(event.target===this)fecharEdicao()">
+  <div style="background:var(--bg-2);border:1px solid var(--line);border-radius:6px;padding:24px;max-width:600px;width:100%;margin:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px">
+      <div class="gen-title" style="margin:0">Editar Produto</div>
+      <button onclick="fecharEdicao()" style="color:var(--text-2);font-size:20px;padding:4px 8px">&times;</button>
+    </div>
+    <form method="post" id="editForm" class="gen-form">
+      <input type="hidden" name="is_active" id="edit_is_active" value="true">
+      <label>Nome <input type="text" name="name" id="edit_name" required></label>
+      <label>Categoria <input type="text" name="category" id="edit_category"></label>
+      <div style="display:flex;gap:12px">
+        <label style="flex:1">Preço (R$) <input type="number" name="price" id="edit_price" step="0.01"></label>
+        <label style="flex:1">Preço Original <input type="number" name="original_price" id="edit_original_price" step="0.01"></label>
+      </div>
+      <div style="display:flex;gap:12px">
+        <label style="flex:1">Avaliação <input type="number" name="rating" id="edit_rating" min="1" max="5"></label>
+        <label style="flex:1">Reviews <input type="number" name="reviews" id="edit_reviews"></label>
+      </div>
+      <label>Badge <input type="text" name="badge" id="edit_badge"></label>
+      <label>Descrição Curta <input type="text" name="short_desc" id="edit_short_desc"></label>
+      <label>Descrição <textarea name="description" id="edit_description" rows="3" style="width:100%;background:#333;border:1px solid transparent;border-radius:4px;padding:10px 12px;color:var(--text);font-family:inherit;font-size:14px;outline:none;resize:vertical"></textarea></label>
+      <label>Especificações <textarea name="specs" id="edit_specs" rows="4" style="width:100%;background:#333;border:1px solid transparent;border-radius:4px;padding:10px 12px;color:var(--text);font-family:inherit;font-size:14px;outline:none;resize:vertical"></textarea></label>
+      <label>URL da Imagem <input type="text" name="image" id="edit_image"></label>
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+        <input type="checkbox" id="edit_active_check" checked onchange="document.getElementById('edit_is_active').value=this.checked?'true':'false'">
+        <span>Produto ativo</span>
+      </label>
+      <button type="submit" class="btn-net">Salvar Alterações</button>
+    </form>
+  </div>
+</div>
+
 <script>
+function abrirEdicao(btn){
+  var d=btn.dataset;
+  document.getElementById('edit_name').value=d.name||'';
+  document.getElementById('edit_category').value=d.category||'';
+  document.getElementById('edit_price').value=d.price||'0';
+  document.getElementById('edit_original_price').value=d.original_price||'0';
+  document.getElementById('edit_rating').value=d.rating||'5';
+  document.getElementById('edit_reviews').value=d.reviews||'0';
+  document.getElementById('edit_badge').value=d.badge||'';
+  document.getElementById('edit_short_desc').value=d.short_desc||'';
+  document.getElementById('edit_description').value=d.description||'';
+  document.getElementById('edit_specs').value=(d.specs||'').replace(/\\n/g,'\n');
+  document.getElementById('edit_image').value=d.image||'';
+  var active=d.is_active==='true';
+  document.getElementById('edit_active_check').checked=active;
+  document.getElementById('edit_is_active').value=active?'true':'false';
+  document.getElementById('editForm').action='/api/painel/products/'+d.id+'/edit';
+  document.getElementById('editModal').style.display='flex';
+}
+function fecharEdicao(){
+  document.getElementById('editModal').style.display='none';
+}
 function copyUrl(){
   var t=document.getElementById('serverUrl').textContent.trim();
   navigator.clipboard.writeText(t).then(function(){flash('URL copiada!')});
