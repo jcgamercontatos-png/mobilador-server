@@ -66,7 +66,7 @@ class Download(Base):
     version = Column(String(50), default="")
     file_size = Column(String(50), default="")
     icon = Column(String(50), default="download")
-    image = Column(String(500), default="")
+    image = Column(Text, default="")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -84,7 +84,7 @@ class Product(Base):
     short_desc = Column(Text, default="")
     description = Column(Text, default="")
     specs = Column(Text, default="")
-    image = Column(String(500), default="")
+    image = Column(Text, default="")
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
@@ -161,6 +161,28 @@ def migrate_db():
             notes TEXT DEFAULT ''
         )
     """)
+    # Migrate image columns to TEXT (to support base64 uploads)
+    for table in ("site_downloads", "site_products"):
+        try:
+            cursor.execute(f"PRAGMA table_info({table})")
+            tcols = cursor.fetchall()
+            if tcols:
+                # SQLite cannot easily ALTER COLUMN type, so recreate when needed
+                col_types = {row[1]: row[2] for row in tcols}
+                if "image" in col_types and "TEXT" not in col_types["image"].upper():
+                    cursor.execute(f"ALTER TABLE {table} RENAME TO {table}_old")
+                    cursor.execute(f"""
+                        CREATE TABLE {table} (
+                            id INTEGER PRIMARY KEY AUTOINCREMENT,
+                            {', '.join([f'{row[1]} {row[2]}' for row in tcols if row[1] != 'image']) + (', image TEXT' if True else '')}
+                        )
+                    """)
+                    cursor.execute(
+                        f"INSERT INTO {table} ({', '.join([row[1] for row in tcols if row[1] != 'image']) + ', image'}) SELECT {', '.join([row[1] for row in tcols if row[1] != 'image']) + ', image'} FROM {table}_old"
+                    )
+                    cursor.execute(f"DROP TABLE {table}_old")
+        except Exception:
+            pass
     conn.commit()
     conn.close()
 
@@ -1176,12 +1198,14 @@ def admin_delete(request: Request, user_id: int, db: Session = Depends(get_db)):
 @app.post("/api/painel/downloads/create")
 def admin_create_download(request: Request, title: str = Form(""), description: str = Form(""),
                           url: str = Form(...), version: str = Form(""), file_size: str = Form(""),
-                          icon: str = Form("download"), image: str = Form(""), db: Session = Depends(get_db)):
+                          icon: str = Form("download"), image: str = Form(""), image_b64: str = Form(""),
+                          db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
         return RedirectResponse(url="/", status_code=302)
+    final_image = image_b64 if image_b64 else image
     d = Download(title=title, description=description, url=url, version=version,
-                 file_size=file_size, icon=icon, image=image, is_active=True)
+                 file_size=file_size, icon=icon, image=final_image, is_active=True)
     db.add(d)
     db.commit()
     return RedirectResponse(url="/api/painel?tab=downloads", status_code=302)
@@ -1209,18 +1233,20 @@ def admin_delete_download(did: int, request: Request, db: Session = Depends(get_
     return RedirectResponse(url="/api/painel?tab=downloads", status_code=302)
 
 @app.post("/api/painel/products/create")
-def admin_create_product(request: Request, name: str = Form(""), category: str = Form(""),
+def admin_create_product(request: Request, name: str = Form(...),
                          price: float = Form(0.0), original_price: float = Form(0.0),
-                         rating: int = Form(5), reviews: int = Form(0),
-                         badge: str = Form(""), short_desc: str = Form(""),
-                         description: str = Form(""), specs: str = Form(""),
-                         image: str = Form(""), db: Session = Depends(get_db)):
+                         category: str = Form(""), rating: float = Form(5.0), reviews: int = Form(0),
+                         badge: str = Form(""), short_desc: str = Form(""), description: str = Form(""),
+                         specs: str = Form(""), is_active: bool = Form(True),
+                         image: str = Form(""), image_b64: str = Form(""),
+                         db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
         return RedirectResponse(url="/", status_code=302)
-    p = Product(name=name, category=category, price=price, original_price=original_price,
+    final_image = image_b64 if image_b64 else image
+    p = Product(name=name, price=price, original_price=original_price, category=category,
                 rating=rating, reviews=reviews, badge=badge, short_desc=short_desc,
-                description=description, specs=specs, image=image, is_active=True)
+                description=description, specs=specs, image=final_image, is_active=True)
     db.add(p)
     db.commit()
     return RedirectResponse(url="/api/painel?tab=produtos", status_code=302)
@@ -1253,7 +1279,7 @@ def admin_edit_product(pid: int, request: Request, name: str = Form(""), categor
                        rating: int = Form(5), reviews: int = Form(0),
                        badge: str = Form(""), short_desc: str = Form(""),
                        description: str = Form(""), specs: str = Form(""),
-                       image: str = Form(""), is_active: bool = Form(True),
+                       image: str = Form(""), image_b64: str = Form(""), is_active: bool = Form(True),
                        db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
@@ -1263,14 +1289,14 @@ def admin_edit_product(pid: int, request: Request, name: str = Form(""), categor
         p.name = name; p.category = category; p.price = price
         p.original_price = original_price; p.rating = rating; p.reviews = reviews
         p.badge = badge; p.short_desc = short_desc; p.description = description
-        p.specs = specs; p.image = image; p.is_active = is_active
+        p.specs = specs; p.image = image_b64 if image_b64 else image; p.is_active = is_active
         db.commit()
     return RedirectResponse(url="/api/painel?tab=produtos", status_code=302)
 
 @app.post("/api/painel/downloads/{did}/edit")
 def admin_edit_download(did: int, request: Request, title: str = Form(""), description: str = Form(""),
                         url: str = Form(...), version: str = Form(""), file_size: str = Form(""),
-                        icon: str = Form("download"), image: str = Form(""),
+                        icon: str = Form("download"), image: str = Form(""), image_b64: str = Form(""),
                         is_active: bool = Form(True), db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
@@ -1279,12 +1305,13 @@ def admin_edit_download(did: int, request: Request, title: str = Form(""), descr
     if d:
         d.title = title; d.description = description; d.url = url
         d.version = version; d.file_size = file_size; d.icon = icon
-        d.image = image; d.is_active = is_active
+        d.image = image_b64 if image_b64 else image
+        d.is_active = is_active
         db.commit()
     return RedirectResponse(url="/api/painel?tab=downloads", status_code=302)
 
 @app.post("/api/painel/downloads/{did}/edit")
-def admin_edit_download(did: int, request: Request, title: str = Form(""), description: str = Form(""),
+def admin_edit_download_legacy(did: int, request: Request, title: str = Form(""), description: str = Form(""),
                         url: str = Form(...), version: str = Form(""), file_size: str = Form(""),
                         icon: str = Form("download"), image: str = Form(""),
                         is_active: bool = Form(True), db: Session = Depends(get_db)):
