@@ -645,7 +645,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
             {% elif k.expires_at %}
               <span class="tag tag-countdown" data-expires="{{ k.expires_at }}">⏱️ <span class="clock-val">Carregando...</span></span>
             {% else %}
-              <span class="tag tag-temp">⏱️ {{ k.license_days }}d</span>
+              <span class="tag tag-temp" title="A contagem só inicia quando o cliente ativar a key no app">⏳ {{ k.license_days }}d disponíveis</span>
             {% endif %}
           </div>
           <div>
@@ -705,7 +705,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
             {% elif k.expires_at %}
               <span class="tag tag-countdown" data-expires="{{ k.expires_at }}">⏱️ <span class="clock-val">Carregando...</span></span>
             {% else %}
-              <span class="tag tag-temp">⏱️ {{ k.license_days }}d (Livre)</span>
+              <span class="tag tag-temp" title="A contagem só inicia quando o cliente ativar a key no app">⏳ {{ k.license_days }}d disponíveis</span>
             {% endif %}
           </div>
           <div>
@@ -768,7 +768,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
             {% elif u.expires_at %}
               <span class="tag tag-countdown" data-expires="{{ u.expires_at }}">⏱️ <span class="clock-val">Carregando...</span></span>
             {% else %}
-              <span class="tag tag-temp">⏱️ {{ u.license_days }}d</span>
+              <span class="tag tag-temp" title="A contagem só inicia quando o cliente ativar a key no app">⏳ {{ u.license_days }}d disponíveis</span>
             {% endif %}
           </div>
           <div>
