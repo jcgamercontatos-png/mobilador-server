@@ -571,18 +571,20 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
       <div class="section-title">Gerar Keys <small>Distribua o acesso</small></div>
 
       {% if created_keys %}
-      <div class="created-card">
-        <h3>✓ Keys geradas com sucesso</h3>
-        <div class="created-row-wrap">
+      <div class="created-card" style="background:linear-gradient(135deg,rgba(17,140,255,0.15),rgba(17,140,255,0.05));border:2px solid #118cff;padding:20px">
+        <h3 style="color:#35b8ff;font-size:16px;font-weight:800;margin-bottom:12px">✓ Key(s) Gerada(s) com Sucesso</h3>
+        <div class="created-row-wrap" style="display:flex;flex-direction:column;gap:10px">
           {% for k in created_keys %}
-          <div class="created-row">
-            <code>{{ k }}</code>
-            <button class="created-copy" onclick="copySingle('{{ k }}', this)">Copiar</button>
+          <div class="created-row" style="background:#0b0b0b;padding:12px 16px;border-radius:6px;border:1px solid #262626;display:flex;align-items:center;justify-content:space-between">
+            <code style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:900;color:#F5C518;letter-spacing:1px">{{ k }}</code>
+            <button type="button" class="btn-net" style="width:auto;padding:8px 16px;margin:0;font-size:13px;background:#118cff" onclick="copySingle('{{ k }}', this)">📋 COPIAR KEY</button>
           </div>
           {% endfor %}
         </div>
-        <button class="btn-net" style="width:auto;padding:8px 18px;margin-top:12px;font-size:13px" onclick="copiarChave()">Copiar Todas</button>
-        <p class="created-note">No app, o cliente cola apenas a KEY. Sem usuário/senha.</p>
+        <div style="margin-top:14px;display:flex;gap:10px">
+          <button type="button" class="btn-net" style="width:auto;padding:10px 20px;font-size:14px;background:#22c55e" onclick="copiarChave()">📋 COPIAR TODAS AS KEYS</button>
+        </div>
+        <p class="created-note" style="margin-top:10px">No app, o cliente cola apenas a KEY para entrar. Sem necessidade de senha.</p>
       </div>
       {% endif %}
 
@@ -604,10 +606,10 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
                 <label>Tipo</label>
                 <select name="license_type" id="licenseType" onchange="toggleDays()">
                   <option value="permanent">Permanente</option>
-                  <option value="temporary">Temporária (dias)</option>
+                  <option value="temporary" selected>Temporária (dias)</option>
                 </select>
               </div>
-              <div class="col2" id="daysField" style="display:none">
+              <div class="col2" id="daysField">
                 <label>Dias</label>
                 <input type="number" name="license_days" value="30" min="1" max="36500">
               </div>
@@ -616,6 +618,65 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
         </div>
         <button type="submit" class="gen-action">GERAR KEY</button>
       </form>
+    </div>
+
+    <div class="section-row" style="margin-top:28px">
+      <div class="section-title">Todas as Keys <small>{{ keys|length if keys else 0 }} cadastradas</small></div>
+      {% if keys and keys|length > 0 %}
+      <div class="keys-table">
+        <div class="keys-thead">
+          <div class="h-key">KEY</div>
+          <div>Cliente</div>
+          <div>Tipo & Validade</div>
+          <div>Status</div>
+          <div>Dispositivo</div>
+          <div>Ações</div>
+        </div>
+        {% for k in keys %}
+        <div class="keys-row">
+          <div class="key-cell">
+            <span style="font-family:'JetBrains Mono',monospace;color:var(--yellow);font-weight:700">{{ k.key_code }}</span>
+            <button type="button" class="btn-mini copy" onclick="copySingle('{{ k.key_code }}', this)">📋 Copiar</button>
+          </div>
+          <div>{{ k.label or '—' }}</div>
+          <div>
+            {% if k.license_type == "permanent" %}
+              <span class="tag tag-perm">Permanente</span>
+            {% elif k.expires_at %}
+              <span class="tag tag-countdown" data-expires="{{ k.expires_at }}">⏱️ <span class="clock-val">Carregando...</span></span>
+            {% else %}
+              <span class="tag tag-temp">⏱️ {{ k.license_days }}d</span>
+            {% endif %}
+          </div>
+          <div>
+            {% if not k.is_active %}<span class="tag tag-revoked">Revogada</span>
+            {% elif k.device_id %}<span class="tag tag-active">Ativa</span>
+            {% else %}<span class="tag tag-free">Livre</span>{% endif %}
+          </div>
+          <div class="device-cell">{{ k.device_id if k.device_id else '—' }}</div>
+          <div class="actions">
+            <button type="button" class="btn-mini copy" onclick="copySingle('{{ k.key_code }}', this)">Copiar Key</button>
+            <form class="inline-form" method="post" action="/api/painel/key-reset/{{ k.id }}" onsubmit="return confirm('Resetar key {{ k.key_code }}?')">
+              <button class="btn-mini reset">Resetar</button>
+            </form>
+            {% if k.is_active and k.device_id %}
+            <form class="inline-form" method="post" action="/api/painel/key-revoke/{{ k.id }}" onsubmit="return confirm('Revogar key {{ k.key_code }}?')">
+              <button class="btn-mini revoke">Revogar</button>
+            </form>
+            {% endif %}
+            <form class="inline-form" method="post" action="/api/painel/key-delete/{{ k.id }}" onsubmit="return confirm('Deletar key {{ k.key_code }} permanentemente?')">
+              <button class="btn-mini del">Deletar</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}
+      <div class="empty-state">
+        <div class="empty-icon">⌗</div>
+        Nenhuma key cadastrada.
+      </div>
+      {% endif %}
     </div>
 
   {% elif tab=='lista' %}

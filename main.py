@@ -405,9 +405,13 @@ def render(request: Request, **ctx):
     ctx = dict(ctx)
     ctx.setdefault('request', request)
     try:
-        return templates.TemplateResponse(request, 'admin.html', ctx)
+        res = templates.TemplateResponse(request, 'admin.html', ctx)
     except TypeError:
-        return templates.TemplateResponse('admin.html', ctx)
+        res = templates.TemplateResponse('admin.html', ctx)
+    res.headers["Cache-Control"] = "no-cache, no-store, must-revalidate, max-age=0, s-maxage=0"
+    res.headers["Pragma"] = "no-cache"
+    res.headers["Expires"] = "0"
+    return res
 
 
 # --- API Endpoints ---
