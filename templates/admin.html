@@ -401,6 +401,29 @@ input,select{font-family:inherit}
   </div>
   {% endif %}
 
+  {% if error %}
+  <div class="created-card" style="border-color:#E50914;background:linear-gradient(135deg,rgba(229,9,20,.15),rgba(229,9,20,.05));margin-top:18px">
+    <h3 style="color:#ff6b6b">⚠ {{ error }}</h3>
+  </div>
+  {% endif %}
+
+  <div class="section-title">Conta do admin</div>
+  <form method="post" action="/api/painel/change-password">
+    <div class="gen-card">
+      <div class="gen-grid">
+        <div>
+          <label>Senha atual</label>
+          <input type="password" name="current_password" required autocomplete="current-password">
+        </div>
+        <div>
+          <label>Nova senha (min. 4 caracteres)</label>
+          <input type="password" name="new_password" required autocomplete="new-password" minlength="4">
+        </div>
+      </div>
+      <button type="submit" class="gen-action" style="background:#E50914">TROCAR SENHA</button>
+    </div>
+  </form>
+
 </main>
 
 <script>

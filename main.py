@@ -372,7 +372,6 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     admin = db.query(UserDB).filter(UserDB.username == "jcgamer").first()
     if admin:
-        admin.password_hash = hash_password("jc230117")
         admin.is_admin = True
         admin.display_name = admin.display_name or "Administrador"
     else:
@@ -1212,6 +1211,40 @@ def admin_delete(request: Request, user_id: int, db: Session = Depends(get_db)):
 def admin_logout():
     response = RedirectResponse(url="/", status_code=302)
     response.delete_cookie("token")
+    return response
+
+
+@app.post("/api/painel/change-password")
+def admin_change_password(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/api/painel", status_code=302)
+    if not new_password or len(new_password) < 4:
+        return render(request, **{
+            "logged": True,
+            "admin_user": admin,
+            "users": _users_view(db),
+            "keys": _keys_view(db),
+            "error": "A nova senha precisa ter no minimo 4 caracteres.",
+        })
+    if not check_password(current_password, admin.password_hash):
+        return render(request, **{
+            "logged": True,
+            "admin_user": admin,
+            "users": _users_view(db),
+            "keys": _keys_view(db),
+            "error": "Senha atual incorreta.",
+        })
+    admin.password_hash = hash_password(new_password)
+    db.commit()
+    token = create_token(admin)
+    response = RedirectResponse(url="/api/painel", status_code=302)
+    response.set_cookie(key="token", value=token, httponly=True, max_age=86400 * 30)
     return response
 
 
