@@ -905,12 +905,13 @@ def _keys_view(db: Session):
         expires_at_iso = ""
         seconds_remaining = None
         if k.license_type == "temporary" and k.license_days:
-            if k.activated_at:
-                act = _as_utc(k.activated_at)
-                exp = act + timedelta(days=k.license_days)
-                expires_at_iso = exp.strftime("%Y-%m-%dT%H:%M:%SZ")
-                rem_seconds = (exp - now).total_seconds()
-                seconds_remaining = max(0, int(rem_seconds))
+            # Use activated_at if present, otherwise created_at
+            start_time = k.activated_at or k.created_at or now
+            act = _as_utc(start_time)
+            exp = act + timedelta(days=k.license_days)
+            expires_at_iso = exp.strftime("%Y-%m-%dT%H:%M:%SZ")
+            rem_seconds = (exp - now).total_seconds()
+            seconds_remaining = max(0, int(rem_seconds))
 
         result.append({
             "id": k.id,
@@ -935,8 +936,9 @@ def _users_view(db: Session):
     for u in rows:
         expires_at_iso = ""
         seconds_remaining = None
-        if u.license_type == "temporary" and u.license_days and u.license_start:
-            start = _as_utc(u.license_start)
+        if u.license_type == "temporary" and u.license_days:
+            start_time = u.license_start or u.created_at or now
+            start = _as_utc(start_time)
             exp = start + timedelta(days=u.license_days)
             expires_at_iso = exp.strftime("%Y-%m-%dT%H:%M:%SZ")
             rem_seconds = (exp - now).total_seconds()

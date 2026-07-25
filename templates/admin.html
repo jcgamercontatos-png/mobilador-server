@@ -654,6 +654,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
           </div>
           <div class="device-cell">{{ k.device_id if k.device_id else '—' }}</div>
           <div class="actions">
+            <button type="button" class="btn-mini copy" onclick="copySingle('{{ k.key_code }}', this)">Copiar Key</button>
             <form class="inline-form" method="post" action="/api/painel/key-reset/{{ k.id }}" onsubmit="return confirm('Resetar key {{ k.key_code }}?')">
               <button class="btn-mini reset">Resetar</button>
             </form>
@@ -714,6 +715,9 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
             {% else %}<span class="tag tag-free">Livre</span>{% endif %}
           </div>
           <div class="actions">
+            {% if u.license_key %}
+            <button type="button" class="btn-mini copy" onclick="copySingle('{{ u.license_key }}', this)">Copiar Key</button>
+            {% endif %}
             {% if u.device_id and not u.is_admin %}
             <form class="inline-form" method="post" action="/api/painel/unlink/{{ u.id }}">
               <button class="btn-mini reset">Resetar</button>
