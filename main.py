@@ -248,6 +248,23 @@ class SecurityEventLog(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
 
+class SiteVisit(Base):
+    __tablename__ = "site_visits"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    visitor_id = Column(String(128), unique=True, nullable=False, index=True)
+    visit_date = Column(DateTime, nullable=False, index=True)
+    visit_count = Column(Integer, default=1)
+    last_seen = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
+class VisitCounter(Base):
+    __tablename__ = "visit_counter"
+    id = Column(Integer, primary_key=True, default=1)
+    total = Column(Integer, default=0, nullable=False)
+    unique_visitors = Column(Integer, default=0, nullable=False)
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+
 class CalculateRequest(BaseModel):
     mouse_dpi: int
     resolution_width: int
@@ -883,13 +900,26 @@ def _admin_from_request(request: Request, db: Session):
 def _keys_view(db: Session):
     rows = db.query(LicenseKeyDB).order_by(LicenseKeyDB.id.desc()).all()
     result = []
+    now = datetime.now(timezone.utc)
     for k in rows:
+        expires_at_iso = ""
+        seconds_remaining = None
+        if k.license_type == "temporary" and k.license_days:
+            if k.activated_at:
+                act = _as_utc(k.activated_at)
+                exp = act + timedelta(days=k.license_days)
+                expires_at_iso = exp.isoformat()
+                rem_seconds = (exp - now).total_seconds()
+                seconds_remaining = max(0, int(rem_seconds))
+
         result.append({
             "id": k.id,
             "key_code": k.key_code,
             "label": k.label or "",
             "license_type": k.license_type,
             "license_days": k.license_days,
+            "seconds_remaining": seconds_remaining,
+            "expires_at": expires_at_iso,
             "is_active": k.is_active,
             "device_id": k.device_id,
             "activated_at": k.activated_at.isoformat() if k.activated_at else "",
@@ -917,7 +947,7 @@ def admin_panel(request: Request, tab: str = "keys", db: Session = Depends(get_d
         "stats_users": len([u for u in users_list if not u.is_admin]),
         "format_date": format_date,
         "public_url": os.environ.get("PUBLIC_URL", os.environ.get("RENDER_EXTERNAL_URL", "")),
-})
+    })
 
 
 @app.post("/api/painel/generate-keys")
@@ -931,7 +961,7 @@ def admin_generate_keys(
 ):
     admin = _admin_from_request(request, db)
     if not admin:
-        return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
+        return RedirectResponse(url="/api/painel?tab=keys", status_code=302)
     quantity = max(1, min(quantity, 50))
     created_keys = []
     try:
@@ -956,7 +986,20 @@ def admin_generate_keys(
         return render(request, logged=True, admin_user=admin, error=f"Erro ao gerar: {str(e)[:200]}")
     keys_list = _keys_view(db)
     users_list = db.query(UserDB).all()
-    return RedirectResponse(url="/api/painel?tab=lista", status_code=302)
+    return render(request, **{
+        "logged": True,
+        "admin_user": admin,
+        "users": users_list,
+        "keys": keys_list,
+        "tab": "keys",
+        "created_keys": created_keys,
+        "stats_total": len(keys_list),
+        "stats_active": sum(1 for k in keys_list if k.get("is_active") and k.get("device_id")),
+        "stats_free": sum(1 for k in keys_list if k.get("is_active") and not k.get("device_id")),
+        "stats_users": len([u for u in users_list if not u.is_admin]),
+        "format_date": format_date,
+        "public_url": os.environ.get("PUBLIC_URL", os.environ.get("RENDER_EXTERNAL_URL", "")),
+    })
 
 
 @app.post("/api/painel/key-reset/{key_id}")
@@ -1131,6 +1174,53 @@ def admin_logout():
     response = RedirectResponse(url="/", status_code=302)
     response.delete_cookie("token")
     return response
+
+
+@app.get("/api/site/visits")
+def get_site_visits(db: Session = Depends(get_db)):
+    counter = db.query(VisitCounter).filter(VisitCounter.id == 1).first()
+    if not counter:
+        counter = VisitCounter(id=1, total=0, unique_visitors=0)
+        db.add(counter)
+        db.commit()
+        db.refresh(counter)
+    return {"total": counter.total, "unique": counter.unique_visitors}
+
+
+@app.post("/api/site/visits")
+def record_site_visit(request: Request, db: Session = Depends(get_db)):
+    import hashlib
+    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    ua = request.headers.get("user-agent", "unknown")
+    visitor_hash = hashlib.sha256(f"{client_ip}-{ua}".encode()).hexdigest()
+
+    now = datetime.now(timezone.utc)
+    six_hours_ago = now - timedelta(hours=6)
+
+    counter = db.query(VisitCounter).filter(VisitCounter.id == 1).first()
+    if not counter:
+        counter = VisitCounter(id=1, total=0, unique_visitors=0)
+        db.add(counter)
+        db.commit()
+        db.refresh(counter)
+
+    existing = db.query(SiteVisit).filter(SiteVisit.visitor_id == visitor_hash).first()
+    counted = False
+
+    if not existing:
+        new_visit = SiteVisit(visitor_id=visitor_hash, visit_date=now, visit_count=1, last_seen=now)
+        db.add(new_visit)
+        counter.total += 1
+        counter.unique_visitors += 1
+        counted = True
+    elif existing.last_seen < six_hours_ago:
+        existing.last_seen = now
+        existing.visit_count += 1
+        counter.total += 1
+        counted = True
+
+    db.commit()
+    return {"total": counter.total, "unique": counter.unique_visitors, "counted": counted}
 
 
 if __name__ == "__main__":

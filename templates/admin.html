@@ -423,6 +423,25 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .tag-revoked{background:rgba(229,9,20,.15);color:var(--red)}
 .tag-admin{background:rgba(229,9,20,.18);color:var(--red-2)}
 
+.tag-countdown{
+  background:rgba(17,140,255,.15);
+  color:#35b8ff;
+  border:1px solid rgba(17,140,255,.3);
+  font-family:'JetBrains Mono',monospace;
+  font-weight:700;
+  padding:4px 8px;
+  border-radius:4px;
+  display:inline-flex;
+  align-items:center;
+  gap:4px;
+}
+.key-row-code{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  overflow:hidden;
+}
+
 .btn-mini{
   padding:5px 9px;border-radius:3px;
   font-size:10px;font-weight:700;
@@ -430,6 +449,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
   border:1px solid transparent;
   transition:.15s;
 }
+.btn-mini.copy{background:rgba(17,140,255,.15);color:#35b8ff;border-color:rgba(17,140,255,.3)}
+.btn-mini.copy:hover{background:rgba(17,140,255,.3);color:#fff}
 .btn-mini.reset{background:rgba(245,197,24,.15);color:var(--yellow);border-color:rgba(245,197,24,.3)}
 .btn-mini.reset:hover{background:rgba(245,197,24,.28)}
 .btn-mini.revoke{background:rgba(229,9,20,.12);color:var(--red);border-color:rgba(229,9,20,.3)}
@@ -605,18 +626,26 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
         <div class="keys-thead">
           <div class="h-key">KEY</div>
           <div>Cliente</div>
-          <div>Tipo</div>
+          <div>Tipo & Validade</div>
           <div>Status</div>
           <div>Dispositivo</div>
           <div>Ações</div>
         </div>
         {% for k in keys %}
         <div class="keys-row">
-          <div class="key-cell">{{ k.key_code }}</div>
+          <div class="key-row-code">
+            <span class="key-cell" title="{{ k.key_code }}">{{ k.key_code }}</span>
+            <button type="button" class="btn-mini copy" onclick="copySingle('{{ k.key_code }}', this)">📋 Copiar</button>
+          </div>
           <div>{{ k.label or '—' }}</div>
           <div>
-            {% if k.license_type == "permanent" %}<span class="tag tag-perm">Permanente</span>
-            {% else %}<span class="tag tag-temp">{{ k.license_days }}d</span>{% endif %}
+            {% if k.license_type == "permanent" %}
+              <span class="tag tag-perm">Permanente</span>
+            {% elif k.expires_at %}
+              <span class="tag tag-countdown" data-expires="{{ k.expires_at }}">⏱️ <span class="clock-val">Carregando...</span></span>
+            {% else %}
+              <span class="tag tag-temp">⏱️ {{ k.license_days }}d (Livre)</span>
+            {% endif %}
           </div>
           <div>
             {% if not k.is_active %}<span class="tag tag-revoked">Revogada</span>
@@ -653,22 +682,32 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
       <div class="section-title">Usuários <small>{{ users|length }} cadastrados</small></div>
       {% if users and users|length > 0 %}
       <div class="keys-table">
-        <div class="keys-thead" style="grid-template-columns:60px 2fr 2fr 1fr 1fr 1.5fr">
+        <div class="keys-thead" style="grid-template-columns:60px 2fr 2fr 1.5fr 1fr 1.5fr">
           <div>ID</div>
           <div>Usuário</div>
           <div>Key</div>
-          <div>Tipo</div>
+          <div>Tipo & Validade</div>
           <div>Status</div>
           <div>Ações</div>
         </div>
         {% for u in users %}
-        <div class="keys-row" style="grid-template-columns:60px 2fr 2fr 1fr 1fr 1.5fr">
+        <div class="keys-row" style="grid-template-columns:60px 2fr 2fr 1.5fr 1fr 1.5fr">
           <div>#{{ u.id }}</div>
           <div>{{ u.display_name or u.username }}{% if u.is_admin %} <span class="tag tag-admin">ADMIN</span>{% endif %}</div>
-          <div class="key-cell">{{ u.license_key or '—' }}</div>
+          <div class="key-row-code">
+            <span class="key-cell">{{ u.license_key or '—' }}</span>
+            {% if u.license_key %}
+            <button type="button" class="btn-mini copy" onclick="copySingle('{{ u.license_key }}', this)">📋 Copiar</button>
+            {% endif %}
+          </div>
           <div>
-            {% if u.license_type == "permanent" %}<span class="tag tag-perm">Permanente</span>
-            {% else %}<span class="tag tag-temp">Temp</span>{% endif %}
+            {% if u.license_type == "permanent" %}
+              <span class="tag tag-perm">Permanente</span>
+            {% elif u.license_start %}
+              <span class="tag tag-countdown" data-expires="{{ (u.license_start + timedelta(days=u.license_days)).isoformat() if u.license_start else '' }}">⏱️ <span class="clock-val">Carregando...</span></span>
+            {% else %}
+              <span class="tag tag-temp">⏱️ {{ u.license_days }}d</span>
+            {% endif %}
           </div>
           <div>
             {% if u.device_id %}<span class="tag tag-locked">Vinculado</span>
@@ -726,6 +765,34 @@ function toggleDays(){
   var sel=document.getElementById('licenseType');
   document.getElementById('daysField').style.display=sel.value==='temporary'?'flex':'none';
 }
+function updateCountdowns() {
+  var elements = document.querySelectorAll('.tag-countdown[data-expires]');
+  var now = new Date().getTime();
+  elements.forEach(function(el) {
+    var expiresAttr = el.getAttribute('data-expires');
+    if (!expiresAttr) return;
+    var expTime = new Date(expiresAttr).getTime();
+    var diff = expTime - now;
+    var clockVal = el.querySelector('.clock-val');
+    if (!clockVal) return;
+
+    if (isNaN(expTime) || diff <= 0) {
+      clockVal.textContent = '00d 00h 00m (Expirada)';
+      el.style.background = 'rgba(229,9,20,.25)';
+      el.style.color = '#ff4d4d';
+    } else {
+      var days = Math.floor(diff / (1000 * 60 * 60 * 24));
+      var hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+      var minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      var seconds = Math.floor((diff % (1000 * 60)) / 1000);
+
+      var pad = function(n) { return n < 10 ? '0' + n : n; };
+      clockVal.textContent = days + 'd ' + pad(hours) + 'h ' + pad(minutes) + 'm ' + pad(seconds) + 's';
+    }
+  });
+}
+setInterval(updateCountdowns, 1000);
+updateCountdowns();
 </script>
 
 {% endif %}
