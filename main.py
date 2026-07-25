@@ -212,7 +212,7 @@ class ValidateResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    version: str = "1.0.1-neon"
+    version: str = "1.0.3-force"
 
 
 class SecurityVerifyRequest(BaseModel):
