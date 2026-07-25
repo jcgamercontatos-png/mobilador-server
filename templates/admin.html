@@ -633,8 +633,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
         </div>
         {% for k in keys %}
         <div class="keys-row">
-          <div class="key-row-code">
-            <span class="key-cell" title="{{ k.key_code }}">{{ k.key_code }}</span>
+          <div class="key-cell">
+            <span style="font-family:'JetBrains Mono',monospace;color:var(--yellow);font-weight:700">{{ k.key_code }}</span>
             <button type="button" class="btn-mini copy" onclick="copySingle('{{ k.key_code }}', this)">📋 Copiar</button>
           </div>
           <div>{{ k.label or '—' }}</div>
@@ -694,8 +694,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
         <div class="keys-row" style="grid-template-columns:60px 2fr 2fr 1.5fr 1fr 1.5fr">
           <div>#{{ u.id }}</div>
           <div>{{ u.display_name or u.username }}{% if u.is_admin %} <span class="tag tag-admin">ADMIN</span>{% endif %}</div>
-          <div class="key-row-code">
-            <span class="key-cell">{{ u.license_key or '—' }}</span>
+          <div class="key-cell">
+            <span style="font-family:'JetBrains Mono',monospace;color:var(--yellow);font-weight:700">{{ u.license_key or '—' }}</span>
             {% if u.license_key %}
             <button type="button" class="btn-mini copy" onclick="copySingle('{{ u.license_key }}', this)">📋 Copiar</button>
             {% endif %}
@@ -703,8 +703,8 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
           <div>
             {% if u.license_type == "permanent" %}
               <span class="tag tag-perm">Permanente</span>
-            {% elif u.license_start %}
-              <span class="tag tag-countdown" data-expires="{{ (u.license_start + timedelta(days=u.license_days)).isoformat() if u.license_start else '' }}">⏱️ <span class="clock-val">Carregando...</span></span>
+            {% elif u.expires_at %}
+              <span class="tag tag-countdown" data-expires="{{ u.expires_at }}">⏱️ <span class="clock-val">Carregando...</span></span>
             {% else %}
               <span class="tag tag-temp">⏱️ {{ u.license_days }}d</span>
             {% endif %}
@@ -771,13 +771,15 @@ function updateCountdowns() {
   elements.forEach(function(el) {
     var expiresAttr = el.getAttribute('data-expires');
     if (!expiresAttr) return;
-    var expTime = new Date(expiresAttr).getTime();
+    var isoStr = expiresAttr.replace(' ', 'T');
+    if (!isoStr.endsWith('Z') && !isoStr.includes('+')) isoStr += 'Z';
+    var expTime = new Date(isoStr).getTime();
     var diff = expTime - now;
     var clockVal = el.querySelector('.clock-val');
     if (!clockVal) return;
 
     if (isNaN(expTime) || diff <= 0) {
-      clockVal.textContent = '00d 00h 00m (Expirada)';
+      clockVal.textContent = 'Expirada (0d 0h 0m)';
       el.style.background = 'rgba(229,9,20,.25)';
       el.style.color = '#ff4d4d';
     } else {

@@ -908,7 +908,7 @@ def _keys_view(db: Session):
             if k.activated_at:
                 act = _as_utc(k.activated_at)
                 exp = act + timedelta(days=k.license_days)
-                expires_at_iso = exp.isoformat()
+                expires_at_iso = exp.strftime("%Y-%m-%dT%H:%M:%SZ")
                 rem_seconds = (exp - now).total_seconds()
                 seconds_remaining = max(0, int(rem_seconds))
 
@@ -928,13 +928,43 @@ def _keys_view(db: Session):
     return result
 
 
+def _users_view(db: Session):
+    rows = db.query(UserDB).all()
+    result = []
+    now = datetime.now(timezone.utc)
+    for u in rows:
+        expires_at_iso = ""
+        seconds_remaining = None
+        if u.license_type == "temporary" and u.license_days and u.license_start:
+            start = _as_utc(u.license_start)
+            exp = start + timedelta(days=u.license_days)
+            expires_at_iso = exp.strftime("%Y-%m-%dT%H:%M:%SZ")
+            rem_seconds = (exp - now).total_seconds()
+            seconds_remaining = max(0, int(rem_seconds))
+
+        result.append({
+            "id": u.id,
+            "username": u.username,
+            "display_name": u.display_name or u.username,
+            "license_key": u.license_key or "",
+            "license_type": u.license_type,
+            "license_days": u.license_days,
+            "license_start": u.license_start.isoformat() if u.license_start else "",
+            "expires_at": expires_at_iso,
+            "seconds_remaining": seconds_remaining,
+            "is_admin": u.is_admin,
+            "device_id": u.device_id,
+        })
+    return result
+
+
 @app.get("/api/painel", response_class=HTMLResponse)
 def admin_panel(request: Request, tab: str = "keys", db: Session = Depends(get_db)):
     admin = _admin_from_request(request, db)
     if not admin:
         return render(request, logged=False)
     keys_list = _keys_view(db)
-    users_list = db.query(UserDB).all()
+    users_list = _users_view(db)
     return render(request, **{
         "logged": True,
         "admin_user": admin,
@@ -944,7 +974,7 @@ def admin_panel(request: Request, tab: str = "keys", db: Session = Depends(get_d
         "stats_total": len(keys_list),
         "stats_active": sum(1 for k in keys_list if k.get("is_active") and k.get("device_id")),
         "stats_free": sum(1 for k in keys_list if k.get("is_active") and not k.get("device_id")),
-        "stats_users": len([u for u in users_list if not u.is_admin]),
+        "stats_users": len([u for u in users_list if not u.get("is_admin")]),
         "format_date": format_date,
         "public_url": os.environ.get("PUBLIC_URL", os.environ.get("RENDER_EXTERNAL_URL", "")),
     })
@@ -985,7 +1015,7 @@ def admin_generate_keys(
         traceback.print_exc()
         return render(request, logged=True, admin_user=admin, error=f"Erro ao gerar: {str(e)[:200]}")
     keys_list = _keys_view(db)
-    users_list = db.query(UserDB).all()
+    users_list = _users_view(db)
     return render(request, **{
         "logged": True,
         "admin_user": admin,
@@ -996,7 +1026,7 @@ def admin_generate_keys(
         "stats_total": len(keys_list),
         "stats_active": sum(1 for k in keys_list if k.get("is_active") and k.get("device_id")),
         "stats_free": sum(1 for k in keys_list if k.get("is_active") and not k.get("device_id")),
-        "stats_users": len([u for u in users_list if not u.is_admin]),
+        "stats_users": len([u for u in users_list if not u.get("is_admin")]),
         "format_date": format_date,
         "public_url": os.environ.get("PUBLIC_URL", os.environ.get("RENDER_EXTERNAL_URL", "")),
     })
