@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text, text
 from sqlalchemy.orm import declarative_base, Session, sessionmaker
 
 DIR = os.path.dirname(os.path.abspath(__file__))
@@ -58,6 +58,7 @@ class LicenseKeyDB(Base):
     license_days = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     device_id = Column(String(255), default=None, nullable=True)
+    pc_device_id = Column(String(255), default=None, nullable=True)
     user_id = Column(Integer, default=None, nullable=True)
     activated_at = Column(DateTime, default=None, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -77,6 +78,8 @@ SessionLocal = sessionmaker(bind=engine)
 
 def migrate_db():
     if not IS_SQLITE:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS pc_device_id VARCHAR"))
         return
     import sqlite3
     conn = sqlite3.connect(DATABASE_URL.replace("sqlite:///", ""))
@@ -115,12 +118,17 @@ def migrate_db():
             license_days INTEGER DEFAULT 0,
             is_active BOOLEAN DEFAULT 1,
             device_id VARCHAR,
+            pc_device_id VARCHAR,
             user_id INTEGER,
             activated_at TIMESTAMP,
             created_at TIMESTAMP,
             notes TEXT DEFAULT ''
         )
     """)
+    cursor.execute("PRAGMA table_info(license_keys)")
+    key_cols = [row[1] for row in cursor.fetchall()]
+    if "pc_device_id" not in key_cols:
+        cursor.execute("ALTER TABLE license_keys ADD COLUMN pc_device_id VARCHAR")
     conn.commit()
     conn.close()
 
@@ -177,6 +185,7 @@ class ActivateKeyRequest(BaseModel):
     device_id: str | None = None
     device_model: str | None = None
     app_version: str | None = None
+    platform: str | None = None
 
 
 class CheckDeviceRequest(BaseModel):
@@ -452,8 +461,11 @@ def activate_key(req: ActivateKeyRequest, db: Session = Depends(get_db)):
     if not device_id:
         raise HTTPException(status_code=400, detail="Identificador do dispositivo obrigatorio")
 
-    if key_row.device_id and key_row.device_id != device_id:
-        raise HTTPException(status_code=403, detail="Key ja vinculada a outro dispositivo. Peca ao admin resetar.")
+    is_pc = (req.platform or "").strip().lower() == "pc" or device_id.upper().startswith("TS-")
+    bound_device = key_row.pc_device_id if is_pc else key_row.device_id
+    if bound_device and bound_device != device_id:
+        platform_name = "computador" if is_pc else "celular"
+        raise HTTPException(status_code=403, detail=f"Key ja vinculada a outro {platform_name}. Peca ao admin resetar.")
 
     user = None
     if key_row.user_id:
@@ -475,7 +487,7 @@ def activate_key(req: ActivateKeyRequest, db: Session = Depends(get_db)):
                 license_start=now if key_row.license_type == "temporary" else None,
                 license_valid=True,
                 license_key=key_row.key_code,
-                device_id=device_id,
+                device_id=None if is_pc else device_id,
             )
             db.add(user)
             db.flush()
@@ -483,17 +495,21 @@ def activate_key(req: ActivateKeyRequest, db: Session = Depends(get_db)):
             key_row.activated_at = now
     else:
         # reativa se necessario
-        if user.device_id and user.device_id != device_id:
-            raise HTTPException(status_code=403, detail="Key ja vinculada a outro dispositivo. Peca ao admin resetar.")
-        if not user.device_id:
-            user.device_id = device_id
+        if not is_pc:
+            if user.device_id and user.device_id != device_id:
+                raise HTTPException(status_code=403, detail="Key ja vinculada a outro celular. Peca ao admin resetar.")
+            if not user.device_id:
+                user.device_id = device_id
         user.license_key = key_row.key_code
         if key_row.license_type == "temporary" and not user.license_start:
             user.license_type = "temporary"
             user.license_days = key_row.license_days
             user.license_start = now
 
-    key_row.device_id = device_id
+    if is_pc:
+        key_row.pc_device_id = device_id
+    else:
+        key_row.device_id = device_id
     if not key_row.activated_at:
         key_row.activated_at = now
 
@@ -1048,6 +1064,7 @@ def admin_key_reset(request: Request, key_id: int, db: Session = Depends(get_db)
     row = db.query(LicenseKeyDB).filter(LicenseKeyDB.id == key_id).first()
     if row:
         row.device_id = None
+        row.pc_device_id = None
         row.is_active = True
         if row.user_id:
             user = db.query(UserDB).filter(UserDB.id == row.user_id).first()
