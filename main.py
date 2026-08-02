@@ -28,6 +28,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{DB_DIR}")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 SECRET_KEY = os.environ.get("SECRET_KEY", "M0b1l4d0rS3cr3tK3y!2024#SuperS3cur3")
+SITE_INTEGRATION_SECRET = os.environ.get("SITE_INTEGRATION_SECRET", "").strip()
 IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
 Base = declarative_base()
@@ -186,6 +187,13 @@ class ActivateKeyRequest(BaseModel):
     device_model: str | None = None
     app_version: str | None = None
     platform: str | None = None
+
+
+class SiteKeyRequest(BaseModel):
+    payment_id: str
+    email: str
+    label: str | None = None
+    license_days: int = 30
 
 
 class CheckDeviceRequest(BaseModel):
@@ -520,6 +528,53 @@ def activate_key(req: ActivateKeyRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     return build_login_response(user)
+
+
+@app.post("/api/integrations/site/generate-key")
+def generate_site_key(req: SiteKeyRequest, request: Request, db: Session = Depends(get_db)):
+    """Cria uma key temporaria para uma venda confirmada pelo site.
+
+    O segredo fica somente nos dois backends. O frontend e o executavel nunca
+    recebem esta credencial. O payment_id torna a operacao idempotente para que
+    webhooks repetidos nao criem keys duplicadas.
+    """
+    supplied_secret = request.headers.get("x-site-integration-key", "").strip()
+    if not SITE_INTEGRATION_SECRET or not secrets.compare_digest(
+        supplied_secret, SITE_INTEGRATION_SECRET
+    ):
+        raise HTTPException(status_code=401, detail="Integracao nao autorizada")
+
+    payment_id = (req.payment_id or "").strip()
+    email = (req.email or "").strip().lower()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,120}", payment_id):
+        raise HTTPException(status_code=400, detail="payment_id invalido")
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email) or len(email) > 254:
+        raise HTTPException(status_code=400, detail="email invalido")
+
+    note = f"site_payment:{payment_id}"
+    existing = db.query(LicenseKeyDB).filter(LicenseKeyDB.notes == note).first()
+    if existing:
+        return {
+            "key": existing.key_code,
+            "license_days": existing.license_days,
+            "created": False,
+        }
+
+    days = max(1, min(int(req.license_days or 30), 3650))
+    code = generate_license_key()
+    while db.query(LicenseKeyDB).filter(LicenseKeyDB.key_code == code).first():
+        code = generate_license_key()
+    row = LicenseKeyDB(
+        key_code=code,
+        label=(req.label or email)[:255],
+        license_type="temporary",
+        license_days=days,
+        is_active=True,
+        notes=note,
+    )
+    db.add(row)
+    db.commit()
+    return {"key": code, "license_days": days, "created": True}
 
 
 @app.post("/api/auth/check-device")
