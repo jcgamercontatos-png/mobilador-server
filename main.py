@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, Text, text
 from sqlalchemy.orm import declarative_base, Session, sessionmaker
 
 DIR = os.path.dirname(os.path.abspath(__file__))
@@ -28,6 +28,7 @@ DATABASE_URL = os.environ.get("DATABASE_URL", f"sqlite:///{DB_DIR}")
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 SECRET_KEY = os.environ.get("SECRET_KEY", "M0b1l4d0rS3cr3tK3y!2024#SuperS3cur3")
+SITE_INTEGRATION_SECRET = os.environ.get("SITE_INTEGRATION_SECRET", "").strip()
 IS_SQLITE = DATABASE_URL.startswith("sqlite")
 
 Base = declarative_base()
@@ -58,6 +59,7 @@ class LicenseKeyDB(Base):
     license_days = Column(Integer, default=0)
     is_active = Column(Boolean, default=True)
     device_id = Column(String(255), default=None, nullable=True)
+    pc_device_id = Column(String(255), default=None, nullable=True)
     user_id = Column(Integer, default=None, nullable=True)
     activated_at = Column(DateTime, default=None, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
@@ -77,6 +79,8 @@ SessionLocal = sessionmaker(bind=engine)
 
 def migrate_db():
     if not IS_SQLITE:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS pc_device_id VARCHAR"))
         return
     import sqlite3
     conn = sqlite3.connect(DATABASE_URL.replace("sqlite:///", ""))
@@ -115,12 +119,17 @@ def migrate_db():
             license_days INTEGER DEFAULT 0,
             is_active BOOLEAN DEFAULT 1,
             device_id VARCHAR,
+            pc_device_id VARCHAR,
             user_id INTEGER,
             activated_at TIMESTAMP,
             created_at TIMESTAMP,
             notes TEXT DEFAULT ''
         )
     """)
+    cursor.execute("PRAGMA table_info(license_keys)")
+    key_cols = [row[1] for row in cursor.fetchall()]
+    if "pc_device_id" not in key_cols:
+        cursor.execute("ALTER TABLE license_keys ADD COLUMN pc_device_id VARCHAR")
     conn.commit()
     conn.close()
 
@@ -177,6 +186,14 @@ class ActivateKeyRequest(BaseModel):
     device_id: str | None = None
     device_model: str | None = None
     app_version: str | None = None
+    platform: str | None = None
+
+
+class SiteKeyRequest(BaseModel):
+    payment_id: str
+    email: str
+    label: str | None = None
+    license_days: int = 30
 
 
 class CheckDeviceRequest(BaseModel):
@@ -212,7 +229,7 @@ class ValidateResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str = "ok"
-    version: str = "1.0.1-neon"
+    version: str = "1.0.3-force"
 
 
 class SecurityVerifyRequest(BaseModel):
@@ -372,7 +389,6 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     admin = db.query(UserDB).filter(UserDB.username == "jcgamer").first()
     if admin:
-        admin.password_hash = hash_password("jc230117")
         admin.is_admin = True
         admin.display_name = admin.display_name or "Administrador"
     else:
@@ -453,8 +469,11 @@ def activate_key(req: ActivateKeyRequest, db: Session = Depends(get_db)):
     if not device_id:
         raise HTTPException(status_code=400, detail="Identificador do dispositivo obrigatorio")
 
-    if key_row.device_id and key_row.device_id != device_id:
-        raise HTTPException(status_code=403, detail="Key ja vinculada a outro dispositivo. Peca ao admin resetar.")
+    is_pc = (req.platform or "").strip().lower() == "pc" or device_id.upper().startswith("TS-")
+    bound_device = key_row.pc_device_id if is_pc else key_row.device_id
+    if bound_device and bound_device != device_id:
+        platform_name = "computador" if is_pc else "celular"
+        raise HTTPException(status_code=403, detail=f"Key ja vinculada a outro {platform_name}. Peca ao admin resetar.")
 
     user = None
     if key_row.user_id:
@@ -476,7 +495,7 @@ def activate_key(req: ActivateKeyRequest, db: Session = Depends(get_db)):
                 license_start=now if key_row.license_type == "temporary" else None,
                 license_valid=True,
                 license_key=key_row.key_code,
-                device_id=device_id,
+                device_id=None if is_pc else device_id,
             )
             db.add(user)
             db.flush()
@@ -484,17 +503,21 @@ def activate_key(req: ActivateKeyRequest, db: Session = Depends(get_db)):
             key_row.activated_at = now
     else:
         # reativa se necessario
-        if user.device_id and user.device_id != device_id:
-            raise HTTPException(status_code=403, detail="Key ja vinculada a outro dispositivo. Peca ao admin resetar.")
-        if not user.device_id:
-            user.device_id = device_id
+        if not is_pc:
+            if user.device_id and user.device_id != device_id:
+                raise HTTPException(status_code=403, detail="Key ja vinculada a outro celular. Peca ao admin resetar.")
+            if not user.device_id:
+                user.device_id = device_id
         user.license_key = key_row.key_code
         if key_row.license_type == "temporary" and not user.license_start:
             user.license_type = "temporary"
             user.license_days = key_row.license_days
             user.license_start = now
 
-    key_row.device_id = device_id
+    if is_pc:
+        key_row.pc_device_id = device_id
+    else:
+        key_row.device_id = device_id
     if not key_row.activated_at:
         key_row.activated_at = now
 
@@ -505,6 +528,53 @@ def activate_key(req: ActivateKeyRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     return build_login_response(user)
+
+
+@app.post("/api/integrations/site/generate-key")
+def generate_site_key(req: SiteKeyRequest, request: Request, db: Session = Depends(get_db)):
+    """Cria uma key temporaria para uma venda confirmada pelo site.
+
+    O segredo fica somente nos dois backends. O frontend e o executavel nunca
+    recebem esta credencial. O payment_id torna a operacao idempotente para que
+    webhooks repetidos nao criem keys duplicadas.
+    """
+    supplied_secret = request.headers.get("x-site-integration-key", "").strip()
+    if not SITE_INTEGRATION_SECRET or not secrets.compare_digest(
+        supplied_secret, SITE_INTEGRATION_SECRET
+    ):
+        raise HTTPException(status_code=401, detail="Integracao nao autorizada")
+
+    payment_id = (req.payment_id or "").strip()
+    email = (req.email or "").strip().lower()
+    if not re.fullmatch(r"[A-Za-z0-9_-]{1,120}", payment_id):
+        raise HTTPException(status_code=400, detail="payment_id invalido")
+    if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email) or len(email) > 254:
+        raise HTTPException(status_code=400, detail="email invalido")
+
+    note = f"site_payment:{payment_id}"
+    existing = db.query(LicenseKeyDB).filter(LicenseKeyDB.notes == note).first()
+    if existing:
+        return {
+            "key": existing.key_code,
+            "license_days": existing.license_days,
+            "created": False,
+        }
+
+    days = max(1, min(int(req.license_days or 30), 3650))
+    code = generate_license_key()
+    while db.query(LicenseKeyDB).filter(LicenseKeyDB.key_code == code).first():
+        code = generate_license_key()
+    row = LicenseKeyDB(
+        key_code=code,
+        label=(req.label or email)[:255],
+        license_type="temporary",
+        license_days=days,
+        is_active=True,
+        notes=note,
+    )
+    db.add(row)
+    db.commit()
+    return {"key": code, "license_days": days, "created": True}
 
 
 @app.post("/api/auth/check-device")
@@ -996,8 +1066,27 @@ def admin_generate_keys(
     label: str = Form(""),
     license_type: str = Form("permanent"),
     license_days: int = Form(30),
+    payment_id: str = Form(""),
+    email: str = Form(""),
     db: Session = Depends(get_db),
 ):
+    supplied_secret = request.headers.get("x-site-integration-key", "").strip()
+    if (
+        supplied_secret
+        and SITE_INTEGRATION_SECRET
+        and secrets.compare_digest(supplied_secret, SITE_INTEGRATION_SECRET)
+    ):
+        return generate_site_key(
+            SiteKeyRequest(
+                payment_id=payment_id,
+                email=email,
+                label=label or None,
+                license_days=license_days,
+            ),
+            request,
+            db,
+        )
+
     admin = _admin_from_request(request, db)
     if not admin:
         return RedirectResponse(url="/api/painel?tab=keys", status_code=302)
@@ -1049,6 +1138,7 @@ def admin_key_reset(request: Request, key_id: int, db: Session = Depends(get_db)
     row = db.query(LicenseKeyDB).filter(LicenseKeyDB.id == key_id).first()
     if row:
         row.device_id = None
+        row.pc_device_id = None
         row.is_active = True
         if row.user_id:
             user = db.query(UserDB).filter(UserDB.id == row.user_id).first()
@@ -1212,6 +1302,40 @@ def admin_delete(request: Request, user_id: int, db: Session = Depends(get_db)):
 def admin_logout():
     response = RedirectResponse(url="/", status_code=302)
     response.delete_cookie("token")
+    return response
+
+
+@app.post("/api/painel/change-password")
+def admin_change_password(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    admin = _admin_from_request(request, db)
+    if not admin:
+        return RedirectResponse(url="/api/painel", status_code=302)
+    if not new_password or len(new_password) < 4:
+        return render(request, **{
+            "logged": True,
+            "admin_user": admin,
+            "users": _users_view(db),
+            "keys": _keys_view(db),
+            "error": "A nova senha precisa ter no minimo 4 caracteres.",
+        })
+    if not check_password(current_password, admin.password_hash):
+        return render(request, **{
+            "logged": True,
+            "admin_user": admin,
+            "users": _users_view(db),
+            "keys": _keys_view(db),
+            "error": "Senha atual incorreta.",
+        })
+    admin.password_hash = hash_password(new_password)
+    db.commit()
+    token = create_token(admin)
+    response = RedirectResponse(url="/api/painel", status_code=302)
+    response.set_cookie(key="token", value=token, httponly=True, max_age=86400 * 30)
     return response
 
 
