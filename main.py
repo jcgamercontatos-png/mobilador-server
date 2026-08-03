@@ -1066,8 +1066,27 @@ def admin_generate_keys(
     label: str = Form(""),
     license_type: str = Form("permanent"),
     license_days: int = Form(30),
+    payment_id: str = Form(""),
+    email: str = Form(""),
     db: Session = Depends(get_db),
 ):
+    supplied_secret = request.headers.get("x-site-integration-key", "").strip()
+    if (
+        supplied_secret
+        and SITE_INTEGRATION_SECRET
+        and secrets.compare_digest(supplied_secret, SITE_INTEGRATION_SECRET)
+    ):
+        return generate_site_key(
+            SiteKeyRequest(
+                payment_id=payment_id,
+                email=email,
+                label=label or None,
+                license_days=license_days,
+            ),
+            request,
+            db,
+        )
+
     admin = _admin_from_request(request, db)
     if not admin:
         return RedirectResponse(url="/api/painel?tab=keys", status_code=302)
